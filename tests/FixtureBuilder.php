@@ -12,25 +12,43 @@ final class FixtureBuilder
         return self::regularWithPayload($payload, $name, $little);
     }
 
-    public static function regularWithPayload(string $payload, string $name = 'Data', bool $little = true): string
-    {
+    /** @param list<int>|null $sectorOrder */
+    public static function regularWithPayload(
+        string $payload,
+        string $name = 'Data',
+        bool $little = true,
+        ?array $sectorOrder = null,
+    ): string {
         if (strlen($payload) < 4096 || strlen($payload) % 512 !== 0 || strlen($payload) > 64_512) {
             throw new \InvalidArgumentException('Regular fixture payload must contain 8 to 126 complete sectors.');
         }
 
         $dataSectorCount = intdiv(strlen($payload), 512);
-        $fat = [0xFFFFFFFE, 0xFFFFFFFD];
-        for ($i = 2; $i < 2 + $dataSectorCount - 1; $i++) {
-            $fat[$i] = $i + 1;
+        $sectorOrder ??= range(2, 1 + $dataSectorCount);
+        $expectedSectors = range(2, 1 + $dataSectorCount);
+        if (
+            count($sectorOrder) !== $dataSectorCount
+            || array_diff($sectorOrder, $expectedSectors) !== []
+            || array_diff($expectedSectors, $sectorOrder) !== []
+        ) {
+            throw new \InvalidArgumentException('Sector order must be a permutation of the payload sector IDs.');
         }
-        $fat[1 + $dataSectorCount] = 0xFFFFFFFE;
+
+        $fat = array_fill(0, 2 + $dataSectorCount, 0xFFFFFFFF);
+        $fat[0] = 0xFFFFFFFE;
+        $fat[1] = 0xFFFFFFFD;
+        foreach ($sectorOrder as $index => $sector) {
+            $fat[$sector] = $sectorOrder[$index + 1] ?? 0xFFFFFFFE;
+        }
         $directory = self::entry('Root Entry', 5, 0xFFFFFFFF, 0xFFFFFFFF, 1, 0xFFFFFFFE, 0, $little)
-            . self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 2, strlen($payload), $little)
+            . self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, $sectorOrder[0], strlen($payload), $little)
             . str_repeat("\0", 256);
-        $sectors = [$directory, self::fat($fat, $little)];
-        foreach (str_split($payload, 512) as $sector) {
-            $sectors[] = $sector;
+        $sectors = [0 => $directory, 1 => self::fat($fat, $little)];
+        foreach (str_split($payload, 512) as $index => $sector) {
+            $sectors[$sectorOrder[$index]] = $sector;
         }
+        ksort($sectors);
+
         return self::header(1, 0, 0xFFFFFFFE, 1, $little).implode('', $sectors);
     }
 

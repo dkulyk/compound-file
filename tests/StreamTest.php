@@ -57,6 +57,23 @@ final class StreamTest extends TestCase
         }
     }
 
+    public function testCompleteReadAcrossFragmentedSectorRuns(): void
+    {
+        $payload = '';
+        for ($sector = 0; $sector < 8; $sector++) {
+            $payload .= str_repeat(chr(65 + $sector), 512);
+        }
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        fwrite($resource, FixtureBuilder::regularWithPayload(
+            $payload,
+            sectorOrder: [2, 3, 6, 7, 4, 5, 8, 9],
+        ));
+        rewind($resource);
+
+        self::assertSame($payload, CompoundFile::fromResource($resource)->getStreamContents('Data'));
+    }
+
     private function openRegularStream(): \DK\CompoundFile\Stream
     {
         $resource = fopen('php://temp', 'w+b');

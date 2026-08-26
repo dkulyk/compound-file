@@ -54,7 +54,8 @@ final class RandomAccessReader
         if ($offset < 0 || $length < 0 || $offset > $this->size || $length > $this->size - $offset) {
             throw new CfbfException('Attempted to read outside the compound file.');
         }
-        if (fseek($this->resource, $offset) !== 0) {
+        $position = ftell($this->resource);
+        if ($position !== $offset && fseek($this->resource, $offset) !== 0) {
             throw new CfbfException('Cannot seek in the compound file.');
         }
         $result = '';

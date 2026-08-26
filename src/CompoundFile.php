@@ -347,14 +347,10 @@ final class CompoundFile
 
     private function readRegularChain(int $start, ?int $limit = null): string
     {
-        $result = '';
-        foreach ($this->chain($start, $this->fat) as $sector) {
-            $result .= $this->sector($sector);
-            if ($limit !== null && strlen($result) >= $limit) {
-                return substr($result, 0, $limit);
-            }
-        }
-        return $limit === null ? $result : substr($result, 0, $limit);
+        $sectors = iterator_to_array($this->chain($start, $this->fat), false);
+        $length = $limit ?? count($sectors) * $this->sectorSize;
+
+        return $this->readSectorRuns($sectors, 0, $length);
     }
 
     private function readRegularChainRange(int $start, int $offset, int $length): string
@@ -364,15 +360,35 @@ final class CompoundFile
         $count = intdiv($inside + $length + $this->sectorSize - 1, $this->sectorSize);
         $sectors = $this->chainRange($start, $this->fat, $this->regularChainCache, $first, $count);
 
+        return $this->readSectorRuns($sectors, $inside, $length);
+    }
+
+    /**
+     * Reads adjacent physical sectors in a single I/O operation.
+     *
+     * @param list<int> $sectors
+     */
+    private function readSectorRuns(array $sectors, int $inside, int $length): string
+    {
         $result = '';
-        foreach ($sectors as $sector) {
-            $chunk = substr($this->sector($sector), $inside, $length - strlen($result));
-            $result .= $chunk;
-            $inside = 0;
-            if (strlen($result) >= $length) {
-                break;
+        $count = count($sectors);
+        for ($index = 0; $index < $count && strlen($result) < $length;) {
+            $runStart = $sectors[$index];
+            $runLength = 1;
+            while (
+                $index + $runLength < $count
+                && $sectors[$index + $runLength] === $runStart + $runLength
+            ) {
+                $runLength++;
             }
+
+            $available = $runLength * $this->sectorSize - $inside;
+            $readLength = min($available, $length - strlen($result));
+            $result .= $this->reader->read($this->sectorOffset($runStart) + $inside, $readLength);
+            $inside = 0;
+            $index += $runLength;
         }
+
         return $result;
     }
 
@@ -454,9 +470,13 @@ final class CompoundFile
 
     private function sector(int $id): string
     {
+        return $this->reader->read($this->sectorOffset($id), $this->sectorSize);
+    }
+
+    private function sectorOffset(int $id): int
+    {
         // In version 4 the 512-byte header is padded to one 4096-byte sector.
-        $offset = $this->sectorSize + $id * $this->sectorSize;
-        return $this->reader->read($offset, $this->sectorSize);
+        return $this->sectorSize + $id * $this->sectorSize;
     }
     /** @return list<int> */
     private function uint32Array(string $bytes): array

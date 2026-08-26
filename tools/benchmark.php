@@ -38,3 +38,17 @@ printf(
     $seconds,
     $iterations / $seconds,
 );
+
+$extractions = max(10, min(1000, intdiv(64 * 1024 * 1024, $entry->getSize())));
+$started = hrtime(true);
+for ($i = 0; $i < $extractions; $i++) {
+    $stream->getContents();
+}
+$seconds = (hrtime(true) - $started) / 1_000_000_000;
+$megabytes = $extractions * $entry->getSize() / 1024 / 1024;
+printf(
+    "%d complete extractions: %.3f s, %.0f MiB/s\n",
+    $extractions,
+    $seconds,
+    $megabytes / $seconds,
+);
