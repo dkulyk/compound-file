@@ -194,23 +194,39 @@ final class CompoundFile
             throw new CfbfException('Invalid CFBF byte-order marker.');
         }
 
-        $this->majorVersion = $this->u16($header, 26);
-        $minorVersion = $this->u16($header, 24);
-        $sectorShift = $this->u16($header, 30);
+        $integer16 = $this->littleEndian ? 'v' : 'n';
+        $versionFields = unpack(
+            $integer16.'minorVersion/'.$integer16.'majorVersion/x2/'
+            .$integer16.'sectorShift/'.$integer16.'miniSectorShift',
+            $header,
+            24,
+        );
+        if ($versionFields === false) {
+            throw new CfbfException('Cannot decode the CFBF version fields.');
+        }
+        $this->majorVersion = $versionFields['majorVersion'];
+        $minorVersion = $versionFields['minorVersion'];
+        $sectorShift = $versionFields['sectorShift'];
         if (($this->majorVersion !== 3 && $this->majorVersion !== 4) || ($sectorShift !== 9 && $sectorShift !== 12)) {
             throw new CfbfException('Unsupported CFBF version or sector size.');
         }
         $this->sectorSize = 1 << $sectorShift;
-        $miniSectorShift = $this->u16($header, 32);
+        $miniSectorShift = $versionFields['miniSectorShift'];
         $this->miniSectorSize = 1 << $miniSectorShift;
-        $fatCount = $this->u32($header, 44);
-        $directoryStart = $this->u32($header, 48);
-        $transactionSignature = $this->u32($header, 52);
-        $this->miniCutoff = $this->u32($header, 56);
-        $miniFatStart = $this->u32($header, 60);
-        $miniFatCount = $this->u32($header, 64);
-        $difatStart = $this->u32($header, 68);
-        $difatCount = $this->u32($header, 72);
+        $headerValues = $this->uint32Array(substr($header, 44, 32));
+        if (count($headerValues) !== 8) {
+            throw new CfbfException('Cannot decode the CFBF header.');
+        }
+        [
+            $fatCount,
+            $directoryStart,
+            $transactionSignature,
+            $this->miniCutoff,
+            $miniFatStart,
+            $miniFatCount,
+            $difatStart,
+            $difatCount,
+        ] = $headerValues;
 
         $this->header = new Header(
             $minorVersion,
@@ -269,7 +285,8 @@ final class CompoundFile
         if ($root->getSize() > 0) {
             $this->miniStream = $this->readRegularChain($root->getStartSector(), $root->getSize());
         }
-        $this->indexDirectoryTree($root->childId, '', []);
+        $ancestors = [];
+        $this->indexDirectoryTree($root->childId, '', $ancestors);
         $root->setPath('');
         $this->entriesByPath[''] = $root;
     }
@@ -335,7 +352,7 @@ final class CompoundFile
     }
 
     /** @param array<int, true> $ancestors */
-    private function indexDirectoryTree(int $id, string $parent, array $ancestors): void
+    private function indexDirectoryTree(int $id, string $parent, array &$ancestors): void
     {
         if ($id === self::NONE) {
             return;
@@ -356,11 +373,12 @@ final class CompoundFile
             $this->indexDirectoryTree($entry->childId, $path, $ancestors);
         }
         $this->indexDirectoryTree($entry->rightId, $parent, $ancestors);
+        unset($ancestors[$id]);
     }
 
     private function readRegularChain(int $start, ?int $limit = null): string
     {
-        $sectors = iterator_to_array($this->chain($start, $this->fat), false);
+        $sectors = $this->chain($start, $this->fat);
         $length = $limit ?? count($sectors) * $this->sectorSize;
 
         return $this->readSectorRuns($sectors, 0, $length);
@@ -384,8 +402,9 @@ final class CompoundFile
     private function readSectorRuns(array $sectors, int $inside, int $length): string
     {
         $result = '';
+        $remaining = $length;
         $count = count($sectors);
-        for ($index = 0; $index < $count && strlen($result) < $length;) {
+        for ($index = 0; $index < $count && $remaining > 0;) {
             $runStart = $sectors[$index];
             $runLength = 1;
             while (
@@ -396,8 +415,9 @@ final class CompoundFile
             }
 
             $available = $runLength * $this->sectorSize - $inside;
-            $readLength = min($available, $length - strlen($result));
+            $readLength = min($available, $remaining);
             $result .= $this->reader->read($this->sectorOffset($runStart) + $inside, $readLength);
+            $remaining -= $readLength;
             $inside = 0;
             $index += $runLength;
         }
@@ -454,17 +474,23 @@ final class CompoundFile
         return array_slice($cache[$start]['sectors'], $first, $count);
     }
 
-    /** @param array<int, int> $table @return \Generator<int, int> */
-    private function chain(int $start, array $table): \Generator
+    /**
+     * @param array<int, int> $table
+     * @return list<int>
+     */
+    private function chain(int $start, array $table): array
     {
         $seen = [];
+        $sectors = [];
         $current = $start;
         while ($current !== self::END) {
             $this->validateChainUnit($current, $table, $seen);
             $seen[$current] = true;
-            yield $current;
+            $sectors[] = $current;
             $current = $table[$current];
         }
+
+        return $sectors;
     }
 
     /**

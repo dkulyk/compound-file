@@ -59,16 +59,14 @@ final class RandomAccessReader
             throw new CfbfException('Cannot seek in the compound file.');
         }
         $result = '';
-        while (strlen($result) < $length) {
-            $remaining = $length - strlen($result);
-            if ($remaining <= 0) {
-                break;
-            }
+        $remaining = $length;
+        while ($remaining > 0) {
             $chunk = fread($this->resource, $remaining);
             if ($chunk === false || $chunk === '') {
                 throw new CfbfException('Unexpected end of compound file.');
             }
             $result .= $chunk;
+            $remaining -= strlen($chunk);
         }
         return $result;
     }

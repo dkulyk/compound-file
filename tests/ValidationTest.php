@@ -28,6 +28,16 @@ final class ValidationTest extends TestCase
         $this->parse($bytes);
     }
 
+    public function testRejectsDirectoryTreeCycle(): void
+    {
+        $bytes = FixtureBuilder::regular();
+        // Point the Data entry's right sibling back to itself.
+        $bytes = substr_replace($bytes, pack('V', 1), 512 + 128 + 72, 4);
+
+        $this->expectException(CfbfException::class);
+        $this->parse($bytes);
+    }
+
     public function testMissingStreamReturnsNullAndFalse(): void
     {
         $file = $this->parse(FixtureBuilder::regular());
