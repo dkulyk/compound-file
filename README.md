@@ -1,11 +1,34 @@
-# OLE2 / CFBF reader for PHP
+# Compound File
 
-A small, read-only implementation of the OLE2 Compound File Binary Format
-(CFBF) for PHP 8.1 and newer. It parses version 3 and version 4 files, FAT,
-DIFAT, mini-FAT, nested storages, UTF-16 names, and both byte orders.
+[![Latest release](https://img.shields.io/github/v/release/dkulyk/compound-file)](https://github.com/dkulyk/compound-file/releases)
+[![Tests](https://github.com/dkulyk/compound-file/actions/workflows/tests.yml/badge.svg)](https://github.com/dkulyk/compound-file/actions/workflows/tests.yml)
+[![PHP](https://img.shields.io/packagist/dependency-v/dkulyk/compound-file/php)](https://packagist.org/packages/dkulyk/compound-file)
+[![License](https://img.shields.io/github/license/dkulyk/compound-file)](LICENSE)
 
-The library deliberately exposes only four public classes. Format bookkeeping
-stays internal, so application code works with named entries and streams.
+A read-only PHP library for Microsoft Compound File Binary Format (CFBF), also
+known as OLE2 or Compound Document File. It provides structured access to the
+storages and streams inside legacy Microsoft Office files such as `.doc`,
+`.xls`, `.ppt`, and `.msg`.
+
+## Features
+
+- CFBF version 3 and version 4
+- FAT, DIFAT, and mini-FAT chains
+- 512-byte and 4096-byte sectors
+- Little-endian and big-endian files
+- 64-bit stream sizes
+- UTF-16LE/BE names converted to UTF-8
+- Nested storages and case-insensitive path lookup
+- Incremental and seekable stream reading
+- Native read-only `ole2://` PHP stream wrapper
+- Header, directory metadata, and allocation-table inspection
+- Validation of signatures, bounds, references, and cyclic chains
+
+## Requirements
+
+- PHP 8.1 or newer
+- `mbstring`
+- A 64-bit PHP build for streams outside the 32-bit integer range
 
 ## Installation
 
@@ -13,176 +36,217 @@ stays internal, so application code works with named entries and streams.
 composer require dkulyk/compound-file
 ```
 
-The `mbstring` extension is required. A 64-bit PHP build is required only when a
-version 4 stream is larger than the integer range of a 32-bit build.
-
 ## Quick start
 
 ```php
 use DK\CompoundFile\CompoundFile;
 
-$document = CompoundFile::open('/documents/example.xls');
+$file = CompoundFile::open('document.xls');
 
-foreach ($document->getEntries() as $entry) {
+foreach ($file->getEntries() as $entry) {
     printf("%s (%d bytes)\n", $entry->getPath(), $entry->getSize());
 }
 
-if ($document->hasStream('Workbook')) {
-    $bytes = $document->getStreamContents('Workbook');
+$workbook = $file->getStreamContents('Workbook');
+```
+
+Paths use `/` between nested storages. Backslashes are accepted as well:
+
+```php
+$stream = $file->openStream('ObjectPool/Object 1');
+```
+
+## Reading streams
+
+### Complete stream
+
+```php
+$contents = $file->getStreamContents('WordDocument');
+```
+
+The method accepts either a path or an existing `DirectoryEntry`:
+
+```php
+$entry = $file->findEntry('WordDocument');
+
+if ($entry !== null && $entry->isStream()) {
+    $contents = $file->getStreamContents($entry);
 }
 ```
 
-Paths use `/` between nested storages. Lookups are case-insensitive, as CFBF
-directory-name comparisons are. Both `Storage/Stream` and
-`Storage\\Stream` are accepted.
-
-## Incremental reading
-
-`Stream` avoids copying the complete logical stream when only a range is
-needed:
+### Incremental reading
 
 ```php
-$stream = $document->openStream('ObjectPool/Object 1');
+$stream = $file->openStream('WordDocument');
+
 $header = $stream->read(32);
 $stream->seek(-16, SEEK_END);
 $trailer = $stream->read(16);
 ```
 
-`read()` returns no more than the requested number of bytes. `seek()` accepts
-`SEEK_SET`, `SEEK_CUR`, and `SEEK_END`, and returns `false` for a position
-outside `[0, size]`.
+`Stream::seek()` supports `SEEK_SET`, `SEEK_CUR`, and `SEEK_END`. It returns
+`false` when the requested position is outside the logical stream.
 
-## Existing PHP resources
-
-The supplied resource must be seekable and remains owned by the caller:
+### Existing PHP resource
 
 ```php
-$handle = fopen('/documents/example.doc', 'rb');
-$document = CompoundFile::fromResource($handle);
-// $handle is still open when $document is destroyed.
+$handle = fopen('document.doc', 'rb');
+$file = CompoundFile::fromResource($handle);
 ```
 
-## Native PHP stream wrapper
+The resource must be seekable. Ownership remains with the caller, so the
+library does not close it.
+
+## PHP stream wrapper
+
+Register the wrapper once and use ordinary PHP stream functions:
 
 ```php
 use DK\CompoundFile\StreamWrapper;
 
 StreamWrapper::register();
-$url = StreamWrapper::url('/documents/example.xls', 'Workbook');
-$handle = fopen($url, 'rb');
 
-$firstKilobyte = fread($handle, 1024);
-fseek($handle, 0);
-
-// Compact syntax for simple paths and stream names:
 $handle = fopen('ole2://document.doc#WordDocument', 'rb');
-
-$rootEntries = scandir(StreamWrapper::directoryUrl('/documents/example.xls'));
-$poolEntries = scandir(StreamWrapper::directoryUrl(
-    '/documents/example.xls',
-    'ObjectPool'
-));
+$contents = stream_get_contents($handle);
 ```
 
-The wrapper is read-only. `register()` may be called repeatedly and accepts a
-custom scheme name. Fragment syntax is convenient for simple names. Use
-`url()` when paths or stream names contain `#`, `?`, spaces, control characters,
-or non-ASCII characters so every component is encoded correctly.
+For arbitrary paths and Unicode or reserved characters, build an encoded URL:
 
-## Public API
+```php
+$url = StreamWrapper::url('/documents/example.xls', 'ObjectPool/Object 1');
+$handle = fopen($url, 'rb');
+```
 
-### `DK\CompoundFile\CompoundFile`
+Storages are exposed as read-only directories:
 
-- `open(string $path): CompoundFile` — opens and parses a filesystem file.
-- `fromResource(resource $resource): CompoundFile` — parses a seekable stream
-  without taking ownership of it.
-- `getMajorVersion(): int` — returns CFBF major version 3 or 4.
-- `getHeader(): Header` — returns parsed, immutable header metadata.
-- `getAllocationTable(): AllocationTable` — returns a diagnostic snapshot of
-  DIFAT, FAT, and mini-FAT.
-- `getEntries(): array` — returns all non-empty `DirectoryEntry` objects,
-  including the root entry.
-- `getEntryById(int $id): ?DirectoryEntry` — performs a raw SID lookup.
-- `findEntry(string $path): ?DirectoryEntry` — finds a storage or stream.
-- `hasStream(string $path): bool` — checks whether a path names a stream.
-- `openStream(string|DirectoryEntry $entry): Stream` — creates a seekable
-  logical stream.
-- `getStreamContents(string|DirectoryEntry $entry): string` — reads a complete
-  logical stream.
+```php
+$root = StreamWrapper::directoryUrl('/documents/example.xls');
+$entries = scandir($root);
 
-### `DK\CompoundFile\DirectoryEntry`
+$objectPool = StreamWrapper::directoryUrl(
+    '/documents/example.xls',
+    'ObjectPool',
+);
+```
 
-- `getId(): int` — zero-based directory identifier.
-- `getName(): string` — UTF-8 name.
-- `getPath(): string` — path relative to the root storage.
-- `getType(): int` — one of `TYPE_STORAGE`, `TYPE_STREAM`, or `TYPE_ROOT`.
-- `getSize(): int` — logical size in bytes.
-- `isStream(): bool` and `isStorage(): bool` — convenient type checks.
-- `getNameByteLength()`, `getColor()`, `getClassId()`, `getStateBits()`,
-  `getCreationTime()`, and `getModifiedTime()` expose directory metadata.
-- `getLeftSiblingId()`, `getRightSiblingId()`, and `getChildId()` expose raw
-  tree identifiers; corresponding object navigation methods omit the `Id`
-  suffix.
+The wrapper supports `fread()`, `feof()`, `ftell()`, `fseek()`, `stat()`,
+`is_file()`, `is_dir()`, `opendir()`, `readdir()`, and `scandir()`.
 
-### `DK\CompoundFile\Header`
+## Inspecting the container
 
-Provides byte order, major/minor version, sector shifts and sizes, transaction
-signature, mini-stream cutoff, and declared FAT, mini-FAT, and DIFAT locations
-and counts. `hasMiniFat()` and `hasDifatSectors()` are convenience checks.
+### Header
 
-### `DK\CompoundFile\AllocationTable`
+```php
+$header = $file->getHeader();
 
-`getDifat()`, `getFat()`, and `getMiniFat()` return copies of the parsed raw
-sector-ID tables for diagnostics and format inspection.
+echo $header->getMajorVersion();
+echo $header->getSectorSize();
+echo $header->getByteOrder();
+```
 
-### `DK\CompoundFile\Stream`
+`Header` exposes the CFBF version, byte order, sector shifts and sizes,
+transaction signature, mini-stream cutoff, and declared FAT, mini-FAT, and
+DIFAT locations and counts.
 
-- `getSize(): int`, `tell(): int`, and `eof(): bool` — stream state.
-- `read(int $length): string` — reads and advances.
-- `getContents(): string` — reads all bytes without changing the position.
-- `seek(int $offset, int $whence = SEEK_SET): bool` — changes position.
+### Directory entries
 
-### `DK\CompoundFile\StreamWrapper`
+```php
+$entry = $file->findEntry('ObjectPool');
 
-- `register(string $scheme = 'ole2'): void` — registers the PHP wrapper.
-- `url(string $file, string $stream, string $scheme = 'ole2'): string` — builds
-  a safe wrapper URL.
-- `directoryUrl(string $file, string $storage = '', string $scheme = 'ole2'):
-  string` — builds a URL usable with `opendir()`, `readdir()`, `scandir()`,
-  `is_dir()`, and `stat()`.
+if ($entry !== null) {
+    echo $entry->getName();
+    echo $entry->getPath();
+    echo $entry->getClassId();
 
-## Errors and validation
+    $children = $file->getChildren($entry->getPath());
+}
+```
 
-Malformed signatures, invalid sector references, truncated reads, cyclic
-FAT/DIFAT/directory chains, invalid UTF-16 names, and unsupported versions
-throw `DK\CompoundFile\Exception\CfbfException`. Invalid caller arguments throw standard
-`InvalidArgumentException`. The PHP wrapper reports open failures through the
-normal `fopen()` `false` result.
+Directory metadata includes type, tree color, sibling and child IDs, CLSID,
+state bits, stream size, and creation/modification timestamps.
 
-## Compatibility and testing
+### Allocation tables
 
-The source uses native PHP 8.1 type declarations. CI runs the test suite on
-PHP 8.1, 8.2, 8.3, 8.4, and current PHP:
+```php
+$tables = $file->getAllocationTable();
+
+$difat = $tables->getDifat();
+$fat = $tables->getFat();
+$miniFat = $tables->getMiniFat();
+```
+
+The returned arrays are diagnostic snapshots and cannot mutate parser state.
+
+## API reference
+
+### `CompoundFile`
+
+| Method | Description |
+| --- | --- |
+| `open(string $path): self` | Open a filesystem file. |
+| `fromResource(resource $resource): self` | Parse an existing seekable resource. |
+| `getHeader(): Header` | Return immutable header metadata. |
+| `getAllocationTable(): AllocationTable` | Return allocation-table snapshots. |
+| `getEntries(): array` | Return all non-empty entries, including the root. |
+| `getChildren(string $storage = ''): array` | Return direct children of a storage. |
+| `getEntryById(int $id): ?DirectoryEntry` | Find an entry by raw SID. |
+| `findEntry(string $path): ?DirectoryEntry` | Find an entry by path. |
+| `hasStream(string $path): bool` | Check whether a stream exists. |
+| `openStream(string\|DirectoryEntry $entry): Stream` | Open a seekable logical stream. |
+| `getStreamContents(string\|DirectoryEntry $entry): string` | Read a complete stream. |
+
+### `DirectoryEntry`
+
+Provides identity, name, path, type, size, CLSID, state bits, timestamps,
+red/black tree metadata, and raw or object navigation for sibling and child
+entries.
+
+### `Stream`
+
+Provides `getSize()`, `tell()`, `eof()`, `read()`, `getContents()`, and
+`seek()`.
+
+### `StreamWrapper`
+
+Provides `register()`, `url()`, and `directoryUrl()`.
+
+## Error handling
+
+Malformed or unsupported files throw
+`DK\CompoundFile\Exception\CfbfException`. This includes invalid signatures,
+truncated data, out-of-range sector references, invalid directory trees, and
+cyclic allocation or directory chains.
+
+Invalid caller arguments throw `InvalidArgumentException`. Wrapper open
+failures follow PHP conventions and return `false` from `fopen()`.
+
+## Development
 
 ```bash
 composer install
 composer check
 ```
 
-`composer check` validates Composer metadata, checks PHP syntax and PSR-12
-formatting, runs PHPStan at level 8, and executes PHPUnit. To apply formatting
-automatically, run `composer format`.
+The quality gate includes Composer validation, PHP syntax checks, PSR-12
+formatting, PHPStan level 8, and PHPUnit. Apply formatting with
+`composer format`.
 
-Unit and integration tests cover regular FAT streams, mini-FAT streams,
-seeking, UTF-16 names, equivalent little/big-endian input, invalid and
-truncated files, cyclic chains, missing streams, wrapper directories, and the
-native PHP stream wrapper.
+Tests run on PHP 8.1 through PHP 8.5 and cover allocation chains, both byte
+orders, seeking, Unicode names, malformed files, wrapper streams/directories,
+and metadata inspection.
 
-The suite also includes a Word 97 `.doc` produced independently by LibreOffice
-from this README through its native CommonMark filter. Regenerate it with
-`composer fixtures`. The script uses `soffice` from `PATH`; set
-`SOFFICE=/custom/path/soffice` to use another binary.
+### Integration fixture
+
+The Word 97 fixture is generated from this README through LibreOffice's
+CommonMark importer:
+
+```bash
+composer fixtures
+```
+
+The command uses `soffice` from `PATH`. Set `SOFFICE=/custom/path/soffice` to
+select another LibreOffice binary.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).
