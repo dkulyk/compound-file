@@ -229,8 +229,7 @@ final class CompoundFile
         );
 
         $fatSectors = [];
-        for ($i = 0; $i < 109; $i++) {
-            $id = $this->u32($header, 76 + $i * 4);
+        foreach ($this->uint32Array(substr($header, 76, 109 * 4)) as $id) {
             if ($id !== self::FREE) {
                 $fatSectors[] = $id;
             }
@@ -242,23 +241,21 @@ final class CompoundFile
             }
             $visited[$difatStart] = true;
             $sector = $this->sector($difatStart);
-            for ($i = 0; $i < $this->sectorSize / 4 - 1; $i++) {
-                $id = $this->u32($sector, $i * 4);
+            $difatEntries = $this->uint32Array($sector);
+            $nextDifat = array_pop($difatEntries);
+            foreach ($difatEntries as $id) {
                 if ($id !== self::FREE) {
                     $fatSectors[] = $id;
                 }
             }
-            $difatStart = $this->u32($sector, $this->sectorSize - 4);
+            $difatStart = $nextDifat ?? self::END;
         }
         if (count($fatSectors) < $fatCount) {
             throw new CfbfException('DIFAT contains fewer FAT sectors than declared.');
         }
         $this->difat = array_slice($fatSectors, 0, $fatCount);
-        foreach (array_slice($fatSectors, 0, $fatCount) as $fatSector) {
-            foreach ($this->uint32Array($this->sector($fatSector)) as $value) {
-                $this->fat[] = $value;
-            }
-        }
+        $fatBytes = $this->readSectorRuns($this->difat, 0, $fatCount * $this->sectorSize);
+        $this->fat = $this->uint32Array($fatBytes);
 
         if ($miniFatCount > 0) {
             $bytes = $this->readRegularChain($miniFatStart, $miniFatCount * $this->sectorSize);
@@ -279,12 +276,28 @@ final class CompoundFile
 
     private function parseDirectory(string $bytes): void
     {
-        for ($offset = 0, $id = 0; $offset + 128 <= strlen($bytes); $offset += 128, $id++) {
-            $type = ord($bytes[$offset + 66]);
+        $integer16 = $this->littleEndian ? 'v' : 'n';
+        $integer32 = $this->littleEndian ? 'V' : 'N';
+        $format = 'x64/'
+            .$integer16.'nameLength/Ctype/Ccolor/'
+            .$integer32.'leftId/'.$integer32.'rightId/'.$integer32.'childId/'
+            .'a16classId/'
+            .$integer32.'stateBits/'
+            .$integer32.'creationLow/'.$integer32.'creationHigh/'
+            .$integer32.'modifiedLow/'.$integer32.'modifiedHigh/'
+            .$integer32.'startSector/'.$integer32.'sizeLow/'.$integer32.'sizeHigh';
+        $length = strlen($bytes);
+
+        for ($offset = 0, $id = 0; $offset + 128 <= $length; $offset += 128, $id++) {
+            $fields = unpack($format, $bytes, $offset);
+            if ($fields === false) {
+                throw new CfbfException('Cannot decode a directory entry.');
+            }
+            $type = $fields['type'];
             if ($type === 0) {
                 continue;
             }
-            $nameLength = $this->u16($bytes, $offset + 64);
+            $nameLength = $fields['nameLength'];
             if ($nameLength < 2 || $nameLength > 64 || $nameLength % 2 !== 0) {
                 throw new CfbfException('Invalid directory entry name length.');
             }
@@ -294,8 +307,8 @@ final class CompoundFile
                 'UTF-8',
                 $this->littleEndian ? 'UTF-16LE' : 'UTF-16BE'
             );
-            $low = $this->u32($bytes, $offset + 120);
-            $high = $this->u32($bytes, $offset + 124);
+            $low = $fields['sizeLow'];
+            $high = $fields['sizeHigh'];
             $size = $this->majorVersion === 3 ? $low : $this->combine64($low, $high);
             $entry = new DirectoryEntry(
                 $this,
@@ -303,15 +316,15 @@ final class CompoundFile
                 $name,
                 $nameLength,
                 $type,
-                ord($bytes[$offset + 67]),
-                $this->u32($bytes, $offset + 68),
-                $this->u32($bytes, $offset + 72),
-                $this->u32($bytes, $offset + 76),
-                $this->decodeClassId(substr($bytes, $offset + 80, 16)),
-                $this->u32($bytes, $offset + 96),
-                $this->decodeFileTime($bytes, $offset + 100),
-                $this->decodeFileTime($bytes, $offset + 108),
-                $this->u32($bytes, $offset + 116),
+                $fields['color'],
+                $fields['leftId'],
+                $fields['rightId'],
+                $fields['childId'],
+                $this->decodeClassId($fields['classId']),
+                $fields['stateBits'],
+                $this->decodeFileTime($fields['creationLow'], $fields['creationHigh']),
+                $this->decodeFileTime($fields['modifiedLow'], $fields['modifiedHigh']),
+                $fields['startSector'],
                 $size,
             );
             $this->entries[$id] = $entry;
@@ -541,10 +554,8 @@ final class CompoundFile
         );
     }
 
-    private function decodeFileTime(string $bytes, int $offset): ?\DateTimeImmutable
+    private function decodeFileTime(int $low, int $high): ?\DateTimeImmutable
     {
-        $low = $this->u32($bytes, $offset);
-        $high = $this->u32($bytes, $offset + 4);
         if ($low === 0 && $high === 0) {
             return null;
         }
