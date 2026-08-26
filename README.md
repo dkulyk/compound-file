@@ -225,11 +225,16 @@ failures follow PHP conventions and return `false` from `fopen()`.
 ```bash
 composer install
 composer check
+composer benchmark
 ```
 
 The quality gate includes Composer validation, PHP syntax checks, PSR-12
 formatting, PHPStan level 8, and PHPUnit. Apply formatting with
 `composer format`.
+
+The benchmark performs repeated random reads from the largest stream in the
+LibreOffice fixture. Pass another CFBF file with
+`composer benchmark -- /path/to/document.doc`.
 
 Tests run on PHP 8.1 through PHP 8.5 and cover allocation chains, both byte
 orders, seeking, Unicode names, malformed files, wrapper streams/directories,

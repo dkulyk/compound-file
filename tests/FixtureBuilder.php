@@ -9,10 +9,21 @@ final class FixtureBuilder
     public static function regular(string $name = 'Data', bool $little = true): string
     {
         $payload = str_repeat('OLE2', 1024); // 4096 bytes: stored in the regular FAT.
+        return self::regularWithPayload($payload, $name, $little);
+    }
+
+    public static function regularWithPayload(string $payload, string $name = 'Data', bool $little = true): string
+    {
+        if (strlen($payload) < 4096 || strlen($payload) % 512 !== 0 || strlen($payload) > 64_512) {
+            throw new \InvalidArgumentException('Regular fixture payload must contain 8 to 126 complete sectors.');
+        }
+
+        $dataSectorCount = intdiv(strlen($payload), 512);
         $fat = [0xFFFFFFFE, 0xFFFFFFFD];
-        for ($i = 2;$i < 9;$i++) {
+        for ($i = 2; $i < 2 + $dataSectorCount - 1; $i++) {
             $fat[$i] = $i + 1;
-        } $fat[9] = 0xFFFFFFFE;
+        }
+        $fat[1 + $dataSectorCount] = 0xFFFFFFFE;
         $directory = self::entry('Root Entry', 5, 0xFFFFFFFF, 0xFFFFFFFF, 1, 0xFFFFFFFE, 0, $little)
             . self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 2, strlen($payload), $little)
             . str_repeat("\0", 256);

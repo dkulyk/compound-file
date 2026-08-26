@@ -41,6 +41,10 @@ final class CompoundFile
     private array $entriesByPath = [];
     private ?DirectoryEntry $root = null;
     private string $miniStream = '';
+    /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
+    private array $regularChainCache = [];
+    /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
+    private array $miniChainCache = [];
 
     private function __construct(RandomAccessReader $reader)
     {
@@ -355,14 +359,14 @@ final class CompoundFile
 
     private function readRegularChainRange(int $start, int $offset, int $length): string
     {
-        $result = '';
         $first = intdiv($offset, $this->sectorSize);
         $inside = $offset % $this->sectorSize;
-        $index = 0;
-        foreach ($this->chain($start, $this->fat) as $sector) {
-            if ($index++ < $first) {
-                continue;
-            } $chunk = substr($this->sector($sector), $inside, $length - strlen($result));
+        $count = intdiv($inside + $length + $this->sectorSize - 1, $this->sectorSize);
+        $sectors = $this->chainRange($start, $this->fat, $this->regularChainCache, $first, $count);
+
+        $result = '';
+        foreach ($sectors as $sector) {
+            $chunk = substr($this->sector($sector), $inside, $length - strlen($result));
             $result .= $chunk;
             $inside = 0;
             if (strlen($result) >= $length) {
@@ -375,14 +379,14 @@ final class CompoundFile
     /** @param array<int, int> $table */
     private function readChainRange(string $source, array $table, int $unitSize, int $start, int $offset, int $length): string
     {
-        $result = '';
         $first = intdiv($offset, $unitSize);
         $inside = $offset % $unitSize;
-        $index = 0;
-        foreach ($this->chain($start, $table) as $unit) {
-            if ($index++ < $first) {
-                continue;
-            } $result .= substr($source, $unit * $unitSize + $inside, $length - strlen($result));
+        $count = intdiv($inside + $length + $unitSize - 1, $unitSize);
+        $units = $this->chainRange($start, $table, $this->miniChainCache, $first, $count);
+
+        $result = '';
+        foreach ($units as $unit) {
+            $result .= substr($source, $unit * $unitSize + $inside, $length - strlen($result));
             $inside = 0;
             if (strlen($result) >= $length) {
                 break;
@@ -391,21 +395,60 @@ final class CompoundFile
         return $result;
     }
 
+    /**
+     * Resolves only the requested part of a chain and retains the index for
+     * subsequent sequential or random reads.
+     *
+     * @param array<int, int> $table
+     * @param array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> $cache
+     * @return list<int>
+     */
+    private function chainRange(int $start, array $table, array &$cache, int $first, int $count): array
+    {
+        if (!isset($cache[$start])) {
+            $cache[$start] = ['sectors' => [], 'seen' => [], 'complete' => false];
+        }
+
+        $last = $first + $count;
+        while (count($cache[$start]['sectors']) < $last && !$cache[$start]['complete']) {
+            $sectors = $cache[$start]['sectors'];
+            $current = $sectors === [] ? $start : $table[$sectors[array_key_last($sectors)]] ?? self::FREE;
+            if ($current === self::END) {
+                $cache[$start]['complete'] = true;
+                break;
+            }
+            $this->validateChainUnit($current, $table, $cache[$start]['seen']);
+            $cache[$start]['seen'][$current] = true;
+            $cache[$start]['sectors'][] = $current;
+        }
+
+        return array_slice($cache[$start]['sectors'], $first, $count);
+    }
+
     /** @param array<int, int> $table @return \Generator<int, int> */
     private function chain(int $start, array $table): \Generator
     {
         $seen = [];
         $current = $start;
         while ($current !== self::END) {
-            if ($current === self::FREE || $current === self::FAT || $current === self::DIFAT || !isset($table[$current])) {
-                throw new CfbfException('Invalid sector chain.');
-            }
-            if (isset($seen[$current])) {
-                throw new CfbfException('Cycle in sector chain.');
-            }
+            $this->validateChainUnit($current, $table, $seen);
             $seen[$current] = true;
             yield $current;
             $current = $table[$current];
+        }
+    }
+
+    /**
+     * @param array<int, int> $table
+     * @param array<int, true> $seen
+     */
+    private function validateChainUnit(int $current, array $table, array $seen): void
+    {
+        if ($current === self::FREE || $current === self::FAT || $current === self::DIFAT || !isset($table[$current])) {
+            throw new CfbfException('Invalid sector chain.');
+        }
+        if (isset($seen[$current])) {
+            throw new CfbfException('Cycle in sector chain.');
         }
     }
 

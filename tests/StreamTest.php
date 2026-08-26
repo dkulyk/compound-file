@@ -36,6 +36,27 @@ final class StreamTest extends TestCase
         self::assertSame('', $stream->read(1));
     }
 
+    public function testRepeatedRandomAccessAcrossManySectors(): void
+    {
+        $payload = '';
+        for ($sector = 0; $sector < 120; $sector++) {
+            $payload .= str_repeat(chr($sector), 512);
+        }
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        fwrite($resource, FixtureBuilder::regularWithPayload($payload));
+        rewind($resource);
+        $stream = CompoundFile::fromResource($resource)->openStream('Data');
+
+        foreach ([118, 3, 87, 0, 117, 42, 87] as $sector) {
+            self::assertTrue($stream->seek($sector * 512 + 500));
+            self::assertSame(
+                str_repeat(chr($sector), 12).str_repeat(chr($sector + 1), 12),
+                $stream->read(24),
+            );
+        }
+    }
+
     private function openRegularStream(): \DK\CompoundFile\Stream
     {
         $resource = fopen('php://temp', 'w+b');
