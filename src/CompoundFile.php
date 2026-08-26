@@ -459,17 +459,22 @@ final class CompoundFile
         }
 
         $last = $first + $count;
-        while (count($cache[$start]['sectors']) < $last && !$cache[$start]['complete']) {
-            $sectors = $cache[$start]['sectors'];
-            $current = $sectors === [] ? $start : $table[$sectors[array_key_last($sectors)]] ?? self::FREE;
+        $entry = &$cache[$start];
+        $sectors = &$entry['sectors'];
+        $seen = &$entry['seen'];
+        $tail = $sectors === [] ? null : $sectors[array_key_last($sectors)];
+        while (count($sectors) < $last && !$entry['complete']) {
+            $current = $tail === null ? $start : $table[$tail] ?? self::FREE;
             if ($current === self::END) {
-                $cache[$start]['complete'] = true;
+                $entry['complete'] = true;
                 break;
             }
-            $this->validateChainUnit($current, $table, $cache[$start]['seen']);
-            $cache[$start]['seen'][$current] = true;
-            $cache[$start]['sectors'][] = $current;
+            $this->validateChainUnit($current, $table, $seen);
+            $seen[$current] = true;
+            $sectors[] = $current;
+            $tail = $current;
         }
+        unset($entry, $sectors, $seen);
 
         return array_slice($cache[$start]['sectors'], $first, $count);
     }

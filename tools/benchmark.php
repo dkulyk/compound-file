@@ -18,6 +18,19 @@ if ($entry === null || $entry->getSize() === 0) {
 }
 
 $stream = $file->openStream($entry);
+$started = hrtime(true);
+$contents = $stream->getContents();
+$coldExtractionSeconds = (hrtime(true) - $started) / 1_000_000_000;
+if (strlen($contents) !== $entry->getSize()) {
+    fwrite(STDERR, "The complete extraction returned an unexpected number of bytes.\n");
+    exit(1);
+}
+printf(
+    "First complete extraction: %.3f ms, %.0f MiB/s\n",
+    $coldExtractionSeconds * 1000,
+    $entry->getSize() / 1024 / 1024 / $coldExtractionSeconds,
+);
+
 $iterations = 10_000;
 $readSize = min(64, $entry->getSize());
 $maximumOffset = $entry->getSize() - $readSize;
