@@ -1,0 +1,31 @@
+{
+    "name": "dkulyk/compound-file",
+    "description": "A readable OLE2/CFBF parser for PHP 8.1 and newer",
+    "keywords": ["cfbf", "compound-file", "ole", "ole2", "office"],
+    "homepage": "https://github.com/dkulyk/compound-file",
+    "license": "MIT",
+    "type": "library",
+    "support": {
+        "issues": "https://github.com/dkulyk/compound-file/issues",
+        "source": "https://github.com/dkulyk/compound-file"
+    },
+    "require": {"php": ">=8.1", "ext-mbstring": "*"},
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^10.5 || ^11.0"
+    },
+    "autoload": {"psr-4": {"DK\\CompoundFile\\": "src/"}},
+    "autoload-dev": {"psr-4": {"DK\\CompoundFile\\Tests\\": "tests/"}},
+    "scripts": {
+        "test": "phpunit",
+        "lint": [
+            "@php tools/lint.php",
+            "php-cs-fixer check --diff --sequential"
+        ],
+        "analyse": "phpstan analyse --no-progress --debug",
+        "check": ["@composer validate --strict", "@lint", "@analyse", "@test"],
+        "format": "php-cs-fixer fix --sequential",
+        "fixtures": "sh tools/generate-fixtures.sh"
+    }
+}
