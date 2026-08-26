@@ -481,10 +481,20 @@ final class CompoundFile
     /** @return list<int> */
     private function uint32Array(string $bytes): array
     {
-        $result = [];
-        for ($i = 0;$i + 4 <= strlen($bytes);$i += 4) {
-            $result[] = $this->u32($bytes, $i);
-        } return $result;
+        $usable = strlen($bytes) & ~3;
+        if ($usable === 0) {
+            return [];
+        }
+
+        $values = unpack(
+            $this->littleEndian ? 'V*' : 'N*',
+            substr($bytes, 0, $usable),
+        );
+        if ($values === false) {
+            throw new CfbfException('Cannot decode a 32-bit integer array.');
+        }
+
+        return array_values($values);
     }
     private function u16(string $bytes, int $offset): int
     {
