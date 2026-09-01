@@ -1,6 +1,6 @@
 {
     "name": "dkulyk/compound-file",
-    "description": "A readable OLE2/CFBF parser for PHP 8.1 and newer",
+    "description": "An OLE2/CFBF reader and writer for PHP 8.1 and newer",
     "keywords": ["cfbf", "compound-file", "ole", "ole2", "office"],
     "homepage": "https://github.com/dkulyk/compound-file",
     "license": "MIT",

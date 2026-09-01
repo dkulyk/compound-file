@@ -5,10 +5,10 @@
 [![PHP](https://img.shields.io/packagist/dependency-v/dkulyk/compound-file/php)](https://packagist.org/packages/dkulyk/compound-file)
 [![License](https://img.shields.io/github/license/dkulyk/compound-file)](LICENSE)
 
-A read-only PHP library for Microsoft Compound File Binary Format (CFBF), also
-known as OLE2 or Compound Document File. It provides structured access to the
-storages and streams inside legacy Microsoft Office files such as `.doc`,
-`.xls`, `.ppt`, and `.msg`.
+A PHP library for reading and writing Microsoft Compound File Binary Format
+(CFBF), also known as OLE2 or Compound Document File. It provides structured
+access to the storages and streams inside legacy Microsoft Office files such as
+`.doc`, `.xls`, `.ppt`, and `.msg`.
 
 ## Features
 
@@ -20,6 +20,9 @@ storages and streams inside legacy Microsoft Office files such as `.doc`,
 - UTF-16LE/BE names converted to UTF-8
 - Nested storages and case-insensitive path lookup
 - Incremental and seekable stream reading
+- Creation and full-file rewriting of compound files
+- Lazy copying of unchanged streams from existing files
+- Atomic filesystem saves
 - Native read-only `ole2://` PHP stream wrapper
 - Header, directory metadata, and allocation-table inspection
 - Validation of signatures, bounds, references, and cyclic chains
@@ -48,6 +51,18 @@ foreach ($file->getEntries() as $entry) {
 }
 
 $workbook = $file->getStreamContents('Workbook');
+```
+
+Create a new compound file:
+
+```php
+use DK\CompoundFile\CompoundFileWriter;
+
+$writer = CompoundFileWriter::create();
+$writer->createStorage('ObjectPool/Object 1');
+$writer->setStreamContents('Workbook', $workbook);
+$writer->setStreamContents('ObjectPool/Object 1/Data', $objectData);
+$writer->save('result.xls');
 ```
 
 Paths use `/` between nested storages. Backslashes are accepted as well:
@@ -96,6 +111,104 @@ $file = CompoundFile::fromResource($handle);
 
 The resource must be seekable. Ownership remains with the caller, so the
 library does not close it.
+
+## Writing compound files
+
+### Creating a file
+
+`CompoundFileWriter::create()` creates a version 3 file with 512-byte sectors
+and little-endian integers by default:
+
+```php
+use DK\CompoundFile\CompoundFileWriter;
+use DK\CompoundFile\Header;
+
+$writer = CompoundFileWriter::create();
+$writer->setStreamContents('Data', $contents);
+$writer->save('container.ole');
+
+// Version 4 uses 4096-byte sectors.
+$version4 = CompoundFileWriter::create(4);
+
+// Big-endian output is supported for compatible consumers.
+$bigEndian = CompoundFileWriter::create(3, Header::BIG_ENDIAN);
+```
+
+`createStorage()` creates all missing parents. A stream's parent must already
+exist, which prevents an accidental typo from silently changing the directory
+structure:
+
+```php
+$writer->createStorage('ObjectPool/Object 1');
+$writer->setStreamContents('ObjectPool/Object 1/Data', $contents);
+```
+
+Paths use `/` or `\` separators and are matched case-insensitively. Each entry
+name is limited to 31 UTF-16 code units and cannot contain `:`, `!`, `/`, `\`,
+or a null byte, as required by CFBF.
+
+### Modifying an existing file
+
+Opening an existing container imports its directory and metadata. Stream bytes
+are copied lazily when `save()` runs, so unchanged large streams are not loaded
+into memory as a single string:
+
+```php
+$writer = CompoundFileWriter::open('template.doc');
+$writer->setStreamContents('WordDocument', $wordDocument);
+$writer->remove('ObjectPool/Obsolete Object');
+$writer->save('result.doc');
+```
+
+An existing seekable resource can be imported with
+`CompoundFileWriter::fromResource($resource)`. The caller retains ownership and
+must keep the source open until saving finishes.
+
+Saving to the original path is supported. Filesystem saves are written to a
+temporary file in the destination directory and then replaced atomically.
+
+### Resource-backed streams and output
+
+Large stream contents can come from a seekable PHP resource:
+
+```php
+$source = fopen('payload.bin', 'rb');
+$writer->setStreamResource('Payload', $source);
+$writer->save('container.ole');
+fclose($source);
+```
+
+The caller retains ownership and must keep the source open until the save has
+finished. The complete resource from byte zero is stored, regardless of its
+current cursor position.
+
+Write a container to an existing resource with `saveToResource()`:
+
+```php
+$output = fopen('php://temp', 'w+b');
+$writer->saveToResource($output);
+rewind($output);
+```
+
+The output must be writable and seekable. It is truncated before writing and
+remains open afterward. Do not use the same resource as both an imported source
+and the output.
+
+### Entry metadata
+
+```php
+$writer->setClassId('ObjectPool/Object 1', '00020906-0000-0000-c000-000000000046');
+$writer->setStateBits('ObjectPool/Object 1', 0x00000001);
+$writer->setTimestamps(
+    'ObjectPool/Object 1',
+    new DateTimeImmutable('2025-01-01 00:00:00 UTC'),
+    new DateTimeImmutable('2025-01-02 00:00:00 UTC'),
+);
+```
+
+The writer rebuilds FAT, DIFAT, mini-FAT, mini-stream, directory sectors, and
+red-black directory trees on every save. Stream sizes below 4096 bytes use the
+mini-stream; streams at or above that boundary use the regular FAT.
 
 ## PHP stream wrapper
 
@@ -210,6 +323,26 @@ Provides `getSize()`, `tell()`, `eof()`, `read()`, `getContents()`, and
 
 Provides `register()`, `url()`, and `directoryUrl()`.
 
+### `CompoundFileWriter`
+
+| Method | Description |
+| --- | --- |
+| `create(int $version = 3, string $byteOrder = Header::LITTLE_ENDIAN): self` | Create an empty writer model. |
+| `open(string $path): self` | Import an existing compound file lazily. |
+| `fromResource(resource $resource): self` | Import a compound file from an existing resource. |
+| `fromCompoundFile(CompoundFile $file): self` | Import an existing parsed container. |
+| `getEntryPaths(): array` | Return all logical entry paths. |
+| `hasEntry(string $path): bool` | Check whether a stream or storage exists. |
+| `createStorage(string $path): self` | Create a storage and missing parents. |
+| `setStreamContents(string $path, string $contents): self` | Create or replace a stream from a string. |
+| `setStreamResource(string $path, resource $resource): self` | Create or replace a stream from a resource. |
+| `remove(string $path): bool` | Remove a stream or complete storage subtree. |
+| `setClassId(string $path, string $classId): self` | Set entry CLSID metadata. |
+| `setStateBits(string $path, int $bits): self` | Set application state bits. |
+| `setTimestamps(string $path, ?DateTimeImmutable $created, ?DateTimeImmutable $modified): self` | Set FILETIME metadata. |
+| `save(string $path): void` | Atomically save to a filesystem path. |
+| `saveToResource(resource $resource): void` | Save to an open seekable resource. |
+
 ## Error handling
 
 Malformed or unsupported files throw
@@ -236,9 +369,18 @@ The benchmark performs repeated random reads from the largest stream in the
 LibreOffice fixture. Pass another CFBF file with
 `composer benchmark -- /path/to/document.doc`.
 
+Run the optional writer interoperability test through LibreOffice with:
+
+```bash
+SOFFICE=/path/to/soffice vendor/bin/phpunit tests/WriterInteropTest.php
+```
+
 Tests run on PHP 8.1 through PHP 8.5 and cover allocation chains, both byte
 orders, seeking, Unicode names, malformed files, wrapper streams/directories,
-and metadata inspection.
+metadata, writer round-trips, stream-size boundaries, multi-sector FAT and
+mini-FAT tables, DIFAT output, nested directory trees, resource I/O, atomic
+replacement, and rewriting a real LibreOffice document without changing its
+stream bytes.
 
 ### Integration fixture
 
