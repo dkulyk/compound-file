@@ -1,6 +1,7 @@
 # Compound File
 
-[![Latest release](https://img.shields.io/github/v/release/dkulyk/compound-file)](https://github.com/dkulyk/compound-file/releases)
+[![Latest Stable Version](https://img.shields.io/packagist/v/dkulyk/compound-file.svg)](https://packagist.org/packages/dkulyk/compound-file)
+[![Total Downloads](https://img.shields.io/packagist/dt/dkulyk/compound-file.svg)](https://packagist.org/packages/dkulyk/compound-file)
 [![Tests](https://github.com/dkulyk/compound-file/actions/workflows/tests.yml/badge.svg)](https://github.com/dkulyk/compound-file/actions/workflows/tests.yml)
 [![PHP](https://img.shields.io/packagist/dependency-v/dkulyk/compound-file/php)](https://packagist.org/packages/dkulyk/compound-file)
 [![License](https://img.shields.io/github/license/dkulyk/compound-file)](LICENSE)
