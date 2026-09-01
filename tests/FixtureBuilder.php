@@ -63,6 +63,22 @@ final class FixtureBuilder
         return self::header(3, 1, 1, 1, true).$directory.$miniFat.$miniStream.self::fat([0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFD], true);
     }
 
+    public static function fragmentedMini(string $name = 'Small'): string
+    {
+        $payload = str_repeat('fragmented-', 10);
+        $directory = self::entry('Root Entry', 5, 0xFFFFFFFF, 0xFFFFFFFF, 1, 2, 512, true)
+            .self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 1, strlen($payload), true)
+            .str_repeat("\0", 256);
+        $miniFat = pack('V*', 0xFFFFFFFE, 3, 0xFFFFFFFF, 0xFFFFFFFE).str_repeat("\xFF", 496);
+        $miniStream = str_repeat('unused-', 9).'x'
+            .substr($payload, 0, 64)
+            .str_repeat("\0", 64)
+            .str_pad(substr($payload, 64), 64, "\0")
+            .str_repeat("\0", 256);
+
+        return self::header(3, 1, 1, 1, true).$directory.$miniFat.$miniStream.self::fat([0xFFFFFFFE, 0xFFFFFFFE, 0xFFFFFFFE, 0xFFFFFFFD], true);
+    }
+
     private static function header(int $fatSector, int $miniCount, int $miniStart, int $fatCount, bool $little): string
     {
         $u16 = function ($v) use ($little) {

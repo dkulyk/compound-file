@@ -213,11 +213,18 @@ final class CompoundFile
         $this->majorVersion = $versionFields['majorVersion'];
         $minorVersion = $versionFields['minorVersion'];
         $sectorShift = $versionFields['sectorShift'];
-        if (($this->majorVersion !== 3 && $this->majorVersion !== 4) || ($sectorShift !== 9 && $sectorShift !== 12)) {
+        if (
+            ($this->majorVersion !== 3 && $this->majorVersion !== 4)
+            || ($this->majorVersion === 3 && $sectorShift !== 9)
+            || ($this->majorVersion === 4 && $sectorShift !== 12)
+        ) {
             throw new CfbfException('Unsupported CFBF version or sector size.');
         }
         $this->sectorSize = 1 << $sectorShift;
         $miniSectorShift = $versionFields['miniSectorShift'];
+        if ($miniSectorShift !== 6) {
+            throw new CfbfException('Unsupported CFBF mini-sector size.');
+        }
         $this->miniSectorSize = 1 << $miniSectorShift;
         $headerValues = $this->uint32Array(substr($header, 44, 32));
         if (count($headerValues) !== 8) {
@@ -233,6 +240,9 @@ final class CompoundFile
             $difatStart,
             $difatCount,
         ] = $headerValues;
+        if ($this->miniCutoff !== 4096) {
+            throw new CfbfException('Unsupported CFBF mini-stream cutoff.');
+        }
 
         $this->header = new Header(
             $minorVersion,
@@ -320,6 +330,12 @@ final class CompoundFile
             if ($type === 0) {
                 continue;
             }
+            if (!in_array($type, [DirectoryEntry::TYPE_STORAGE, DirectoryEntry::TYPE_STREAM, DirectoryEntry::TYPE_ROOT], true)) {
+                throw new CfbfException('Invalid directory entry type.');
+            }
+            if ($fields['color'] !== 0 && $fields['color'] !== 1) {
+                throw new CfbfException('Invalid directory entry color.');
+            }
             $nameLength = $fields['nameLength'];
             if ($nameLength < 2 || $nameLength > 64 || $nameLength % 2 !== 0) {
                 throw new CfbfException('Invalid directory entry name length.');
@@ -352,6 +368,9 @@ final class CompoundFile
             );
             $this->entries[$id] = $entry;
             if ($type === DirectoryEntry::TYPE_ROOT) {
+                if ($this->root !== null) {
+                    throw new CfbfException('Multiple root directory entries.');
+                }
                 $this->root = $entry;
             }
         }
@@ -374,7 +393,11 @@ final class CompoundFile
         $this->indexDirectoryTree($entry->leftId, $parent, $ancestors);
         $path = $parent === '' ? $entry->getName() : $parent . '/' . $entry->getName();
         $entry->setPath($path);
-        $this->entriesByPath[$this->normalizePath($path)] = $entry;
+        $normalizedPath = $this->normalizePath($path);
+        if (isset($this->entriesByPath[$normalizedPath])) {
+            throw new CfbfException('Directory contains duplicate entry paths.');
+        }
+        $this->entriesByPath[$normalizedPath] = $entry;
         if ($entry->isStorage()) {
             $this->indexDirectoryTree($entry->childId, $path, $ancestors);
         }
@@ -441,11 +464,22 @@ final class CompoundFile
 
         $result = '';
         foreach ($units as $unit) {
-            $result .= substr($source, $unit * $unitSize + $inside, $length - strlen($result));
+            if ($unit < 0 || $unit > intdiv(strlen($source), $unitSize) - 1) {
+                throw new CfbfException('Mini-sector chain references data outside the mini-stream.');
+            }
+            $available = $unitSize - $inside;
+            $result .= substr(
+                $source,
+                $unit * $unitSize + $inside,
+                min($available, $length - strlen($result)),
+            );
             $inside = 0;
             if (strlen($result) >= $length) {
                 break;
             }
+        }
+        if (strlen($result) !== $length) {
+            throw new CfbfException('Sector chain is shorter than the declared stream size.');
         }
         return $result;
     }
