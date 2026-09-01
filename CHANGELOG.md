@@ -6,6 +6,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Deterministic mutation coverage for bit flips, integer overwrites, and file
+  truncation across regular, mini-FAT, and big-endian containers.
+- Repeated writer round-trip coverage for versions 3 and 4 in both byte orders.
+- Reproducible real-world benchmark corpus pinned to checksum-verified
+  LibreOffice DOC, XLS, and PPT fixtures.
+
+### Changed
+
+- Report median parser-open time, first extraction, random-read throughput, and
+  warm extraction throughput for multiple files in text or JSON format.
+
 ## [0.2.2] - 2026-09-02
 
 ### Fixed
