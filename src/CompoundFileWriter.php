@@ -204,6 +204,7 @@ final class CompoundFileWriter
     public function save(string $path): void
     {
         $directory = dirname($path);
+        $permissions = is_file($path) ? @fileperms($path) : false;
         $temporary = @tempnam($directory, '.compound-file-');
         if ($temporary === false) {
             throw new CfbfException(sprintf('Cannot create a temporary file in "%s".', $directory));
@@ -218,6 +219,12 @@ final class CompoundFileWriter
             $this->write($resource);
             if (!fflush($resource)) {
                 throw new CfbfException('Cannot flush the compound file.');
+            }
+            if ($permissions !== false && !@chmod($temporary, $permissions & 0o777)) {
+                throw new CfbfException(sprintf('Cannot preserve permissions for compound file "%s".', $path));
+            }
+            if (!fsync($resource)) {
+                throw new CfbfException('Cannot synchronize the compound file with storage.');
             }
             fclose($resource);
             $resource = null;

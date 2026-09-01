@@ -165,8 +165,10 @@ An existing seekable resource can be imported with
 `CompoundFileWriter::fromResource($resource)`. The caller retains ownership and
 must keep the source open until saving finishes.
 
-Saving to the original path is supported. Filesystem saves are written to a
-temporary file in the destination directory and then replaced atomically.
+Saving to the original path is supported. Filesystem saves are flushed and
+synchronized to storage, written to a temporary file in the destination
+directory, and then replaced atomically. Existing POSIX permissions are
+preserved.
 
 ### Resource-backed streams and output
 

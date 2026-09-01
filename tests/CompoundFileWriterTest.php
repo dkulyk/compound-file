@@ -205,6 +205,50 @@ final class CompoundFileWriterTest extends TestCase
         }
     }
 
+    public function testAtomicSavePreservesExistingPermissions(): void
+    {
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::markTestSkipped('POSIX permissions are not available on Windows.');
+        }
+        $path = tempnam(sys_get_temp_dir(), 'compound-permissions-');
+        self::assertIsString($path);
+        self::assertTrue(chmod($path, 0o640));
+        try {
+            $writer = CompoundFileWriter::create();
+            $writer->setStreamContents('Data', 'permissions');
+            $writer->save($path);
+
+            clearstatcache(true, $path);
+            self::assertSame(0o640, fileperms($path) & 0o777);
+            self::assertSame('permissions', CompoundFile::open($path)->getStreamContents('Data'));
+        } finally {
+            @unlink($path);
+        }
+    }
+
+    public function testFailedAtomicReplacementRemovesTemporaryFile(): void
+    {
+        $directory = sys_get_temp_dir().'/compound-target-'.bin2hex(random_bytes(6));
+        self::assertTrue(mkdir($directory));
+        try {
+            $before = glob(sys_get_temp_dir().'/.compound-file-*');
+            self::assertIsArray($before);
+            $writer = CompoundFileWriter::create();
+            $writer->setStreamContents('Data', 'value');
+            try {
+                $writer->save($directory);
+                self::fail('Replacing a directory with a compound file succeeded.');
+            } catch (CfbfException $exception) {
+                self::assertStringContainsString('Cannot replace', $exception->getMessage());
+            }
+            $after = glob(sys_get_temp_dir().'/.compound-file-*');
+            self::assertIsArray($after);
+            self::assertSame($before, $after);
+        } finally {
+            rmdir($directory);
+        }
+    }
+
     public function testSaveToResourceKeepsResourceOpenAndTruncatesIt(): void
     {
         $resource = fopen('php://temp', 'w+b');

@@ -25,7 +25,8 @@
         ],
         "analyse": "phpstan analyse --no-progress --debug",
         "benchmark": "@php tools/benchmark.php",
-        "check": ["@composer validate --strict", "@lint", "@analyse", "@test"],
+        "quality": ["@composer validate --strict", "@lint", "@analyse"],
+        "check": ["@quality", "@test"],
         "format": "php-cs-fixer fix --sequential",
         "fixtures": "sh tools/generate-fixtures.sh"
     }
