@@ -68,6 +68,12 @@ final class CompoundFile
         return new self(RandomAccessReader::wrap($resource));
     }
 
+    /** @internal Releases an owned filesystem handle and makes this parser unusable. */
+    public function close(): void
+    {
+        $this->reader->close();
+    }
+
     /** Returns the CFB major version (3 or 4). */
     public function getMajorVersion(): int
     {

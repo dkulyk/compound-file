@@ -159,4 +159,17 @@ final class WritableEntry
 
         return '';
     }
+
+    public function rebindSource(CompoundFile $previous, CompoundFile $replacement): void
+    {
+        if ($this->sourceFile !== $previous || $this->sourceEntry === null) {
+            return;
+        }
+        $entry = $replacement->findEntry($this->sourceEntry->getPath());
+        if ($entry === null || !$entry->isStream()) {
+            throw new \LogicException('Cannot rebind an imported compound stream.');
+        }
+        $this->sourceFile = $replacement;
+        $this->sourceEntry = $entry;
+    }
 }

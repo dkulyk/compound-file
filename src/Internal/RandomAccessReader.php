@@ -51,6 +51,9 @@ final class RandomAccessReader
 
     public function read(int $offset, int $length): string
     {
+        if (!is_resource($this->resource)) {
+            throw new CfbfException('The compound file has been closed.');
+        }
         if ($offset < 0 || $length < 0 || $offset > $this->size || $length > $this->size - $offset) {
             throw new CfbfException('Attempted to read outside the compound file.');
         }
@@ -71,10 +74,16 @@ final class RandomAccessReader
         return $result;
     }
 
-    public function __destruct()
+    public function close(): void
     {
         if ($this->closeWhenDone && is_resource($this->resource)) {
             fclose($this->resource);
         }
+        $this->resource = null;
+    }
+
+    public function __destruct()
+    {
+        $this->close();
     }
 }

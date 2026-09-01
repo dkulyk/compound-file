@@ -30,6 +30,8 @@ final class CompoundFileWriter
     private bool $littleEndian;
     /** @var array<string, WritableEntry> */
     private array $entries = [];
+    private ?CompoundFile $ownedSource = null;
+    private ?string $sourcePath = null;
 
     private function __construct(int $majorVersion, bool $littleEndian)
     {
@@ -56,7 +58,12 @@ final class CompoundFileWriter
     /** Opens an existing compound file as a mutable writer model. */
     public static function open(string $path): self
     {
-        return self::fromCompoundFile(CompoundFile::open($path));
+        $file = CompoundFile::open($path);
+        $writer = self::fromCompoundFile($file);
+        $writer->ownedSource = $file;
+        $writer->sourcePath = realpath($path) ?: $path;
+
+        return $writer;
     }
 
     /**
@@ -228,8 +235,14 @@ final class CompoundFileWriter
             }
             fclose($resource);
             $resource = null;
+            $closedSource = $this->closeSourceForReplacement($path);
             if (!@rename($temporary, $path)) {
+                $this->restoreClosedSource($closedSource);
                 throw new CfbfException(sprintf('Cannot replace compound file "%s".', $path));
+            }
+            if ($closedSource !== null) {
+                $this->replaceEntriesFrom(CompoundFile::open($path));
+                $this->sourcePath = realpath($path) ?: $path;
             }
         } finally {
             if (is_resource($resource)) {
@@ -771,6 +784,46 @@ final class CompoundFileWriter
         }
 
         return $this->entries[$key];
+    }
+
+    private function closeSourceForReplacement(string $path): ?CompoundFile
+    {
+        if ($this->ownedSource === null || $this->sourcePath === null) {
+            return null;
+        }
+        $target = realpath($path) ?: $path;
+        $samePath = PHP_OS_FAMILY === 'Windows'
+            ? strcasecmp($target, $this->sourcePath) === 0
+            : $target === $this->sourcePath;
+        if (!$samePath) {
+            return null;
+        }
+        $source = $this->ownedSource;
+        $source->close();
+        $this->ownedSource = null;
+
+        return $source;
+    }
+
+    private function restoreClosedSource(?CompoundFile $closedSource): void
+    {
+        if ($closedSource === null || $this->sourcePath === null) {
+            return;
+        }
+        $replacement = CompoundFile::open($this->sourcePath);
+        foreach ($this->entries as $entry) {
+            $entry->rebindSource($closedSource, $replacement);
+        }
+        $this->ownedSource = $replacement;
+    }
+
+    private function replaceEntriesFrom(CompoundFile $file): void
+    {
+        $this->entries = [];
+        foreach ($file->getEntries() as $entry) {
+            $this->entries[$this->normalizePath($entry->getPath())] = WritableEntry::imported($file, $entry);
+        }
+        $this->ownedSource = $file;
     }
 
     private function parentPath(string $path): string
