@@ -1,0 +1,32 @@
+name: LibreOffice interoperability
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 4 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: libreoffice-interop
+  cancel-in-progress: true
+
+jobs:
+  libreoffice:
+    name: Rewrite and open with LibreOffice
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with: {php-version: '8.3', coverage: none}
+      - run: composer install --prefer-dist --no-interaction
+      - name: Install LibreOffice Writer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes libreoffice-writer
+      - name: Verify writer interoperability
+        env:
+          SOFFICE: /usr/bin/soffice
+        run: vendor/bin/phpunit tests/WriterInteropTest.php
