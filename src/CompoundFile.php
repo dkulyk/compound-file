@@ -68,7 +68,7 @@ final class CompoundFile
         return new self(RandomAccessReader::wrap($resource));
     }
 
-    /** @internal Releases an owned filesystem handle and makes this parser unusable. */
+    /** Releases the parser's filesystem handle; caller-owned resources stay open. */
     public function close(): void
     {
         $this->reader->close();

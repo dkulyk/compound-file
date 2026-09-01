@@ -199,10 +199,14 @@ final class CompoundFileWriterTest extends TestCase
             $rewrite->setStreamContents('Data', 'after');
             $rewrite->save($path);
 
-            self::assertSame('after', CompoundFile::open($path)->getStreamContents('Data'));
+            $check = CompoundFile::open($path);
+            self::assertSame('after', $check->getStreamContents('Data'));
+            $check->close();
             $rewrite->setStreamContents('Data', 'second save');
             $rewrite->save($path);
-            self::assertSame('second save', CompoundFile::open($path)->getStreamContents('Data'));
+            $check = CompoundFile::open($path);
+            self::assertSame('second save', $check->getStreamContents('Data'));
+            $check->close();
         } finally {
             @unlink($path);
         }

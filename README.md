@@ -113,6 +113,12 @@ $file = CompoundFile::fromResource($handle);
 The resource must be seekable. Ownership remains with the caller, so the
 library does not close it.
 
+For deterministic handle release in long-running processes, call
+`$file->close()` when the parser is no longer needed. It closes resources opened
+by `CompoundFile::open()` but never closes a resource supplied by the caller.
+The parser and streams created from it must not be used afterward. On Windows,
+close any other readers before atomically replacing the same file.
+
 ## Writing compound files
 
 ### Creating a file
@@ -301,6 +307,7 @@ The returned arrays are diagnostic snapshots and cannot mutate parser state.
 | --- | --- |
 | `open(string $path): self` | Open a filesystem file. |
 | `fromResource(resource $resource): self` | Parse an existing seekable resource. |
+| `close(): void` | Release the parser handle without closing caller-owned resources. |
 | `getHeader(): Header` | Return immutable header metadata. |
 | `getAllocationTable(): AllocationTable` | Return allocation-table snapshots. |
 | `getEntries(): array` | Return all non-empty entries, including the root. |
