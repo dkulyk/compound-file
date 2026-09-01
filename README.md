@@ -380,9 +380,19 @@ The quality gate includes Composer validation, PHP syntax checks, PSR-12
 formatting, PHPStan level 8, and PHPUnit. Apply formatting with
 `composer format`.
 
-The benchmark performs repeated random reads from the largest stream in the
-LibreOffice fixture. Pass another CFBF file with
-`composer benchmark -- /path/to/document.doc`.
+The benchmark measures median open time, first extraction, random access, and
+warm extraction throughput for the largest stream. Pass one or more CFBF files
+or request machine-readable output directly:
+
+```bash
+composer benchmark -- /path/to/document.doc /path/to/workbook.xls
+php tools/benchmark.php --json /path/to/document.doc
+```
+
+The scheduled workflow downloads a checksum-verified corpus pinned to a
+specific LibreOffice revision. `tools/download-benchmark-corpus.sh` reproduces
+the same corpus locally without committing large binary fixtures to this
+repository.
 
 Run the optional writer interoperability test through LibreOffice with:
 

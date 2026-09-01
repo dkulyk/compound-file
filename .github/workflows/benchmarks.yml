@@ -22,8 +22,24 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with: {php-version: '8.3', coverage: none}
       - run: composer install --prefer-dist --no-interaction
+      - name: Download pinned LibreOffice corpus
+        run: tools/download-benchmark-corpus.sh benchmark-corpus
       - name: Measure reader performance
-        run: composer benchmark | tee benchmark.txt
+        run: |
+          composer benchmark -- \
+            tests/fixtures/README.doc \
+            benchmark-corpus/tdf169705.ppt \
+            benchmark-corpus/forum-mso-en4-243595.xls \
+            benchmark-corpus/not.xls \
+            benchmark-corpus/vba_endFunction.xls \
+            | tee benchmark.txt
+          php tools/benchmark.php --json \
+            tests/fixtures/README.doc \
+            benchmark-corpus/tdf169705.ppt \
+            benchmark-corpus/forum-mso-en4-243595.xls \
+            benchmark-corpus/not.xls \
+            benchmark-corpus/vba_endFunction.xls \
+            > benchmark.json
       - name: Publish run summary
         run: |
           echo '## Reader benchmark' >> "$GITHUB_STEP_SUMMARY"
@@ -33,5 +49,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: reader-benchmark-${{ github.sha }}
-          path: benchmark.txt
+          path: |
+            benchmark.txt
+            benchmark.json
           retention-days: 90
