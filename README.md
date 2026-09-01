@@ -392,6 +392,11 @@ mini-FAT tables, DIFAT output, nested directory trees, resource I/O, atomic
 replacement, and rewriting a real LibreOffice document without changing its
 stream bytes.
 
+GitHub Actions also runs two weekly, manually dispatchable checks: a
+LibreOffice writer interoperability test and a reader benchmark whose output is
+retained as a build artifact. Benchmarks are observational and do not fail a
+build on noisy timing differences.
+
 ### Integration fixture
 
 The Word 97 fixture is generated from this README through LibreOffice's

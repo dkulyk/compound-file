@@ -1,11 +1,16 @@
 name: tests
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.workflow }}-${{ github.ref }}
+  group: tests-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
