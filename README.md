@@ -365,6 +365,11 @@ failures follow PHP conventions and return `false` from `fopen()`.
 
 ## Development
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contribution workflow,
+performance requirements, and pull-request conventions. Notable changes are
+recorded in [CHANGELOG.md](CHANGELOG.md), and vulnerabilities should be reported
+according to [SECURITY.md](SECURITY.md).
+
 ```bash
 composer install
 composer check
