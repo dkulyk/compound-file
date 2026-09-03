@@ -243,6 +243,9 @@ final class CompoundFile
         if ($this->miniCutoff !== 4096) {
             throw new CfbfException('Unsupported CFBF mini-stream cutoff.');
         }
+        if ($fatCount > intdiv($this->reader->size(), $this->sectorSize)) {
+            throw new CfbfException('Declared FAT size exceeds the compound file size.');
+        }
 
         $this->header = new Header(
             $minorVersion,
@@ -286,6 +289,9 @@ final class CompoundFile
             throw new CfbfException('DIFAT contains fewer FAT sectors than declared.');
         }
         $this->difat = array_slice($fatSectors, 0, $fatCount);
+        if (count(array_unique($this->difat)) !== count($this->difat)) {
+            throw new CfbfException('DIFAT contains duplicate FAT sector references.');
+        }
         $fatBytes = $this->readSectorRuns($this->difat, 0, $fatCount * $this->sectorSize);
         $this->fat = $this->uint32Array($fatBytes);
 
@@ -305,6 +311,11 @@ final class CompoundFile
         $this->indexDirectoryTree($root->childId, '', $ancestors);
         $root->setPath('');
         $this->entriesByPath[''] = $root;
+        $reachable = [];
+        foreach ($this->entriesByPath as $entry) {
+            $reachable[$entry->getId()] = true;
+        }
+        $this->entries = array_intersect_key($this->entries, $reachable);
     }
 
     private function parseDirectory(string $bytes): void
@@ -449,6 +460,9 @@ final class CompoundFile
             $remaining -= $readLength;
             $inside = 0;
             $index += $runLength;
+        }
+        if ($remaining !== 0) {
+            throw new CfbfException('Sector chain is shorter than the requested byte range.');
         }
 
         return $result;

@@ -227,8 +227,9 @@ final class CompoundFileWriter
             if (!fflush($resource)) {
                 throw new CfbfException('Cannot flush the compound file.');
             }
-            if ($permissions !== false && !@chmod($temporary, $permissions & 0o777)) {
-                throw new CfbfException(sprintf('Cannot preserve permissions for compound file "%s".', $path));
+            $targetPermissions = $permissions !== false ? $permissions & 0o777 : 0o666 & ~umask();
+            if (!@chmod($temporary, $targetPermissions)) {
+                throw new CfbfException(sprintf('Cannot set permissions for compound file "%s".', $path));
             }
             if (!fsync($resource)) {
                 throw new CfbfException('Cannot synchronize the compound file with storage.');
@@ -280,6 +281,13 @@ final class CompoundFileWriter
         $sectorSize = $this->majorVersion === 3 ? 512 : 4096;
         $entriesPerFatSector = intdiv($sectorSize, 4);
         $orderedEntries = $this->orderedEntries();
+        if ($this->majorVersion === 3) {
+            foreach ($orderedEntries as $entry) {
+                if ($entry->isStream() && $entry->getSize() > 0x7FFFFFFF) {
+                    throw new CfbfException('CFBF version 3 streams cannot exceed 2 GiB.');
+                }
+            }
+        }
         $directorySectorCount = max(1, intdiv(count($orderedEntries) * 128 + $sectorSize - 1, $sectorSize));
 
         $miniStreams = [];

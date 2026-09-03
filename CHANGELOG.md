@@ -6,6 +6,23 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-09-03
+
+### Security
+
+- Bound declared FAT data by the input file size and reject duplicate FAT
+  sector references, preventing disproportionate memory allocation from a
+  small malicious container.
+
+### Fixed
+
+- Reject regular FAT chains that end before the requested stream range.
+- Exclude unreachable directory entries so rewriting cannot resurrect orphaned
+  or shadowing streams.
+- Apply `0666 & ~umask()` permissions when saving a new filesystem file.
+- Reject version 3 streams larger than the 2 GiB specification limit before
+  allocating tables or copying stream bytes.
+
 ## [0.2.3] - 2026-09-02
 
 ### Added
@@ -101,7 +118,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial CFBF reader with FAT, DIFAT, mini-FAT, endian-aware parsing, Unicode
   names, resource input, and the read-only `ole2://` stream wrapper.
 
-[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/dkulyk/compound-file/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/dkulyk/compound-file/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/dkulyk/compound-file/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/dkulyk/compound-file/compare/v0.2.0...v0.2.1
