@@ -74,6 +74,7 @@ final class CompoundFileWriterTest extends TestCase
         $file = $this->roundTrip($writer);
         self::assertSame(4, $file->getMajorVersion());
         self::assertSame(4096, $file->getHeader()->getSectorSize());
+        self::assertSame(1, $file->getHeader()->getDirectorySectorCount());
         self::assertSame(str_repeat('m', 777), $file->getStreamContents('Mini'));
         self::assertSame(str_repeat('r', 12_345), $file->getStreamContents('Regular'));
     }
@@ -89,6 +90,15 @@ final class CompoundFileWriterTest extends TestCase
         self::assertTrue($file->getHeader()->isBigEndian());
         self::assertSame(str_repeat('m', 333), $file->getStreamContents('Малий'));
         self::assertSame(str_repeat('BE', 2500), $file->getStreamContents('Сховище/Потік'));
+    }
+
+    public function testUnicodePathRegistryUsesCfbfCaseFolding(): void
+    {
+        $writer = CompoundFileWriter::create();
+        $writer->setStreamContents('Ünicode', 'value');
+
+        self::assertTrue($writer->hasEntry('ünicode'));
+        self::assertSame('value', $this->roundTrip($writer)->getStreamContents('ÜNICODE'));
     }
 
     public function testMiniFatSpansMultipleSectors(): void

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use DK\CompoundFile\CompoundFile;
+use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\DirectoryEntry;
 
 require dirname(__DIR__).'/vendor/autoload.php';
@@ -59,6 +60,11 @@ foreach ($results as $result) {
         $result['warm_extraction_seconds'],
         $result['warm_extraction_mib_s'],
     );
+    printf(
+        "Writer rewrite median: %.3f ms, %.0f MiB/s\n",
+        $result['writer_rewrite_median_ms'],
+        $result['writer_rewrite_mib_s'],
+    );
 }
 
 /**
@@ -75,7 +81,9 @@ foreach ($results as $result) {
  *     random_reads_s: float,
  *     warm_extractions: int,
  *     warm_extraction_seconds: float,
- *     warm_extraction_mib_s: float
+ *     warm_extraction_mib_s: float,
+ *     writer_rewrite_median_ms: float,
+ *     writer_rewrite_mib_s: float
  * }
  */
 function benchmark(string $path): array
@@ -144,6 +152,21 @@ function benchmark(string $path): array
         throw new RuntimeException('Cannot determine benchmark file size.');
     }
 
+    $writer = CompoundFileWriter::open($path);
+    $writerSamples = [];
+    for ($iteration = 0; $iteration < 7; $iteration++) {
+        $output = fopen('php://temp/maxmemory:16777216', 'w+b');
+        if ($output === false) {
+            throw new RuntimeException('Cannot create benchmark output stream.');
+        }
+        $started = hrtime(true);
+        $writer->saveToResource($output);
+        $writerSamples[] = elapsedSeconds($started);
+        fclose($output);
+    }
+    sort($writerSamples);
+    $writerMedian = $writerSamples[intdiv(count($writerSamples), 2)];
+
     return [
         'path' => $path,
         'file_bytes' => $fileSize,
@@ -158,6 +181,8 @@ function benchmark(string $path): array
         'warm_extractions' => $warmExtractions,
         'warm_extraction_seconds' => $warmExtractionSeconds,
         'warm_extraction_mib_s' => $warmMegabytes / $warmExtractionSeconds,
+        'writer_rewrite_median_ms' => $writerMedian * 1000,
+        'writer_rewrite_mib_s' => $fileSize / 1024 / 1024 / $writerMedian,
     ];
 }
 

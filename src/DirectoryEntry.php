@@ -26,6 +26,8 @@ final class DirectoryEntry
     private int $stateBits;
     private ?\DateTimeImmutable $creationTime;
     private ?\DateTimeImmutable $modifiedTime;
+    private ?int $creationFileTimeTicks;
+    private ?int $modifiedFileTimeTicks;
     /** @internal */
     public int $leftId;
     /** @internal */
@@ -50,6 +52,8 @@ final class DirectoryEntry
         ?\DateTimeImmutable $modifiedTime,
         int $startSector,
         int $size,
+        ?int $creationFileTimeTicks = null,
+        ?int $modifiedFileTimeTicks = null,
     ) {
         $this->owner = $owner;
         $this->id = $id;
@@ -66,6 +70,8 @@ final class DirectoryEntry
         $this->stateBits = $stateBits;
         $this->creationTime = $creationTime;
         $this->modifiedTime = $modifiedTime;
+        $this->creationFileTimeTicks = $creationFileTimeTicks;
+        $this->modifiedFileTimeTicks = $modifiedFileTimeTicks;
         $this->path = $name;
     }
 
@@ -108,6 +114,16 @@ final class DirectoryEntry
     public function getModifiedTime(): ?\DateTimeImmutable
     {
         return $this->modifiedTime;
+    }
+    /** Returns the exact creation FILETIME tick count, or null when unset. */
+    public function getCreationFileTimeTicks(): ?int
+    {
+        return $this->creationFileTimeTicks;
+    }
+    /** Returns the exact modification FILETIME tick count, or null when unset. */
+    public function getModifiedFileTimeTicks(): ?int
+    {
+        return $this->modifiedFileTimeTicks;
     }
     /** Returns the raw left-sibling directory identifier. */
     public function getLeftSiblingId(): int

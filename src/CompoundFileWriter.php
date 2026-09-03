@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DK\CompoundFile;
 
 use DK\CompoundFile\Exception\CfbfException;
+use DK\CompoundFile\Internal\PathNormalizer;
 use DK\CompoundFile\Internal\RandomAccessReader;
 use DK\CompoundFile\Internal\WritableEntry;
 use DK\CompoundFile\Internal\WritableTreeNode;
@@ -25,6 +26,7 @@ final class CompoundFileWriter
     private const NONE = 0xFFFFFFFF;
     private const MINI_CUTOFF = 4096;
     private const MINI_SECTOR_SIZE = 64;
+    private const COPY_BLOCK_SIZE = 1_048_576;
 
     private int $majorVersion;
     private bool $littleEndian;
@@ -184,6 +186,8 @@ final class CompoundFileWriter
         $entry = $this->entry($path);
         $entry->creationTime = $creationTime;
         $entry->modifiedTime = $modifiedTime;
+        $entry->creationFileTimeTicks = null;
+        $entry->modifiedFileTimeTicks = null;
 
         return $this;
     }
@@ -408,8 +412,12 @@ final class CompoundFileWriter
 
         foreach ($regularStreams as $stream) {
             $entry = $stream['entry'];
-            for ($offset = 0; $offset < $entry->getSize(); $offset += $sectorSize) {
-                $this->writeAll($resource, str_pad($entry->read($offset, $sectorSize), $sectorSize, "\0"));
+            for ($offset = 0; $offset < $entry->getSize(); $offset += self::COPY_BLOCK_SIZE) {
+                $this->writeAll($resource, $entry->read($offset, self::COPY_BLOCK_SIZE));
+            }
+            $padding = ($sectorSize - $entry->getSize() % $sectorSize) % $sectorSize;
+            if ($padding > 0) {
+                $this->writeAll($resource, str_repeat("\0", $padding));
             }
         }
 
@@ -693,8 +701,8 @@ final class CompoundFileWriter
             .$this->u32($tree->left).$this->u32($tree->right).$this->u32($tree->child)
             .$this->encodeClassId($entry->classId)
             .$this->u32($entry->stateBits)
-            .$this->encodeFileTime($entry->creationTime)
-            .$this->encodeFileTime($entry->modifiedTime)
+            .$this->encodeFileTime($entry->creationTime, $entry->creationFileTimeTicks)
+            .$this->encodeFileTime($entry->modifiedTime, $entry->modifiedFileTimeTicks)
             .$this->u32($location['start']).$this->u32($sizeLow).$this->u32($sizeHigh);
     }
 
@@ -710,15 +718,18 @@ final class CompoundFileWriter
             .hex2bin($parts[4].$parts[5]);
     }
 
-    private function encodeFileTime(?\DateTimeImmutable $time): string
+    private function encodeFileTime(?\DateTimeImmutable $time, ?int $originalTicks): string
     {
         if ($time === null) {
             return str_repeat("\0", 8);
         }
+        if ($originalTicks !== null) {
+            return $this->u32($originalTicks % 4294967296).$this->u32(intdiv($originalTicks, 4294967296));
+        }
         if ($time->getTimestamp() < -11_644_473_600) {
             throw new CfbfException('CFBF timestamps cannot be earlier than 1601-01-01 UTC.');
         }
-        $ticks = ($time->getTimestamp() + 11_644_473_600) * 10_000_000;
+        $ticks = ($time->getTimestamp() + 11_644_473_600) * 10_000_000 + (int) $time->format('u') * 10;
 
         return $this->u32($ticks % 4294967296).$this->u32(intdiv($ticks, 4294967296));
     }
@@ -730,8 +741,8 @@ final class CompoundFileWriter
 
     private function compareNames(string $left, string $right): int
     {
-        $leftUpper = mb_strtoupper($left, 'UTF-8');
-        $rightUpper = mb_strtoupper($right, 'UTF-8');
+        $leftUpper = PathNormalizer::fold($left);
+        $rightUpper = PathNormalizer::fold($right);
         $leftUtf16 = mb_convert_encoding($leftUpper, 'UTF-16BE', 'UTF-8');
         $rightUtf16 = mb_convert_encoding($rightUpper, 'UTF-16BE', 'UTF-8');
         $length = strlen($leftUtf16) <=> strlen($rightUtf16);
@@ -843,7 +854,7 @@ final class CompoundFileWriter
 
     private function normalizePath(string $path): string
     {
-        return mb_strtolower(str_replace('\\', '/', trim($path, '/\\')), 'UTF-8');
+        return PathNormalizer::normalize($path);
     }
 
     private function u16(int $value): string

@@ -24,6 +24,7 @@ final class Header
         private int $miniFatSectorCount,
         private int $difatStartSector,
         private int $difatSectorCount,
+        private int $directorySectorCount = 0,
     ) {
     }
 
@@ -70,6 +71,11 @@ final class Header
     public function getDirectoryStartSector(): int
     {
         return $this->directoryStartSector;
+    }
+    /** Returns the declared directory sector count (version 4; zero in version 3). */
+    public function getDirectorySectorCount(): int
+    {
+        return $this->directorySectorCount;
     }
     public function getTransactionSignature(): int
     {
