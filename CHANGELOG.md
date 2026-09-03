@@ -6,6 +6,19 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Expose the version 4 directory-sector count through `Header`.
+- Expose raw 100-nanosecond FILETIME values on directory entries and preserve
+  them exactly when rewriting imported containers.
+- Include full writer rewrite time and throughput in the benchmark output.
+
+### Changed
+
+- Use consistent Unicode-aware path lookup in the reader and writer.
+- Copy imported regular streams in 1 MiB blocks instead of one sector at a
+  time, substantially improving full-file rewrite throughput.
+
 ## [0.2.4] - 2026-09-03
 
 ### Security

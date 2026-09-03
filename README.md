@@ -264,11 +264,13 @@ $header = $file->getHeader();
 echo $header->getMajorVersion();
 echo $header->getSectorSize();
 echo $header->getByteOrder();
+echo $header->getDirectorySectorCount();
 ```
 
 `Header` exposes the CFBF version, byte order, sector shifts and sizes,
 transaction signature, mini-stream cutoff, and declared FAT, mini-FAT, and
-DIFAT locations and counts.
+DIFAT locations and counts. Version 4 headers also expose the declared
+directory-sector count.
 
 ### Directory entries
 
@@ -285,7 +287,9 @@ if ($entry !== null) {
 ```
 
 Directory metadata includes type, tree color, sibling and child IDs, CLSID,
-state bits, stream size, and creation/modification timestamps.
+state bits, stream size, and creation/modification timestamps. The raw
+100-nanosecond FILETIME tick values are available when exact round trips are
+required.
 
 ### Allocation tables
 
@@ -308,6 +312,7 @@ The returned arrays are diagnostic snapshots and cannot mutate parser state.
 | `open(string $path): self` | Open a filesystem file. |
 | `fromResource(resource $resource): self` | Parse an existing seekable resource. |
 | `close(): void` | Release the parser handle without closing caller-owned resources. |
+| `getMajorVersion(): int` | Return the CFBF major version (`3` or `4`). |
 | `getHeader(): Header` | Return immutable header metadata. |
 | `getAllocationTable(): AllocationTable` | Return allocation-table snapshots. |
 | `getEntries(): array` | Return all non-empty entries, including the root. |
@@ -321,6 +326,7 @@ The returned arrays are diagnostic snapshots and cannot mutate parser state.
 ### `DirectoryEntry`
 
 Provides identity, name, path, type, size, CLSID, state bits, timestamps,
+exact `getCreationFileTimeTicks()` and `getModifiedFileTimeTicks()` values,
 red/black tree metadata, and raw or object navigation for sibling and child
 entries.
 
@@ -380,9 +386,10 @@ The quality gate includes Composer validation, PHP syntax checks, PSR-12
 formatting, PHPStan level 8, and PHPUnit. Apply formatting with
 `composer format`.
 
-The benchmark measures median open time, first extraction, random access, and
-warm extraction throughput for the largest stream. Pass one or more CFBF files
-or request machine-readable output directly:
+The benchmark measures median open time, first extraction, random access, warm
+extraction throughput for the largest stream, and full writer rewrite
+throughput. Pass one or more CFBF files or request machine-readable output
+directly:
 
 ```bash
 composer benchmark -- /path/to/document.doc /path/to/workbook.xls

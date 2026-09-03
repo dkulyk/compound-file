@@ -38,6 +38,14 @@ final class CompoundFileTest extends TestCase
         self::assertSame(str_repeat('OLE2', 1024), CompoundFile::fromResource($resource)->getStreamContents('Дані'));
     }
 
+    public function testUnicodePathLookupUsesTheSameCaseFoldingAsTheWriter(): void
+    {
+        $file = $this->parse(FixtureBuilder::regular('Ünicode'));
+
+        self::assertTrue($file->hasStream('ünicode'));
+        self::assertSame(str_repeat('OLE2', 1024), $file->getStreamContents('ÜNICODE'));
+    }
+
     public function testLittleAndBigEndianFilesExposeEquivalentStreams(): void
     {
         $littleEndian = $this->parse(FixtureBuilder::regular('Equivalent', true));

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DK\CompoundFile;
 
 use DK\CompoundFile\Exception\CfbfException;
+use DK\CompoundFile\Internal\PathNormalizer;
 use DK\CompoundFile\Internal\RandomAccessReader;
 
 /**
@@ -261,6 +262,7 @@ final class CompoundFile
             $miniFatCount,
             $difatStart,
             $difatCount,
+            $this->u32($header, 40),
         );
 
         $fatSectors = [];
@@ -360,6 +362,8 @@ final class CompoundFile
             $low = $fields['sizeLow'];
             $high = $fields['sizeHigh'];
             $size = $this->majorVersion === 3 ? $low : $this->combine64($low, $high);
+            $creationFileTime = $this->combine64($fields['creationLow'], $fields['creationHigh']);
+            $modifiedFileTime = $this->combine64($fields['modifiedLow'], $fields['modifiedHigh']);
             $entry = new DirectoryEntry(
                 $this,
                 $id,
@@ -372,10 +376,12 @@ final class CompoundFile
                 $fields['childId'],
                 $this->decodeClassId($fields['classId']),
                 $fields['stateBits'],
-                $this->decodeFileTime($fields['creationLow'], $fields['creationHigh']),
-                $this->decodeFileTime($fields['modifiedLow'], $fields['modifiedHigh']),
+                $this->decodeFileTime($creationFileTime),
+                $this->decodeFileTime($modifiedFileTime),
                 $fields['startSector'],
                 $size,
+                $creationFileTime === 0 ? null : $creationFileTime,
+                $modifiedFileTime === 0 ? null : $modifiedFileTime,
             );
             $this->entries[$id] = $entry;
             if ($type === DirectoryEntry::TYPE_ROOT) {
@@ -639,17 +645,25 @@ final class CompoundFile
         );
     }
 
-    private function decodeFileTime(int $low, int $high): ?\DateTimeImmutable
+    private function decodeFileTime(int $ticks): ?\DateTimeImmutable
     {
-        if ($low === 0 && $high === 0) {
+        if ($ticks === 0) {
             return null;
         }
-        $ticks = $this->combine64($low, $high);
-        $unixSeconds = intdiv($ticks, 10_000_000) - 11_644_473_600;
-        return new \DateTimeImmutable('@'.$unixSeconds);
+        $wholeSeconds = intdiv($ticks, 10_000_000);
+        $microseconds = intdiv($ticks % 10_000_000, 10);
+        $time = \DateTimeImmutable::createFromFormat(
+            'U.u',
+            sprintf('%d.%06d', $wholeSeconds - 11_644_473_600, $microseconds),
+        );
+        if ($time === false) {
+            throw new CfbfException('Cannot decode a directory FILETIME value.');
+        }
+
+        return $time;
     }
     private function normalizePath(string $path): string
     {
-        return strtolower(str_replace('\\', '/', trim($path, '/\\')));
+        return PathNormalizer::normalize($path);
     }
 }
