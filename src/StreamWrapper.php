@@ -86,23 +86,23 @@ final class StreamWrapper
 
     /**
      * @internal
-     * @return array<int|string, int>
+     * @return array<int|string, int>|false
      */
-    public function url_stat(string $path, int $flags): array
+    public function url_stat(string $path, int $flags): array|false
     {
         $location = $this->parseUrl($path, 'stream') ?? $this->parseUrl($path, 'storage');
         if ($location === null) {
-            return [];
+            return false;
         }
         try {
             $entry = CompoundFile::open($location['file'])->findEntry($location['entry']);
             if ($entry === null) {
-                return [];
+                return false;
             }
             $mode = $entry->isStorage() ? 0o040555 : 0o100444;
             return ['size' => $entry->getSize(), 7 => $entry->getSize(), 'mode' => $mode, 2 => $mode];
         } catch (\Throwable $exception) {
-            return [];
+            return false;
         }
     }
 

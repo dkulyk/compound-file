@@ -54,6 +54,20 @@ final class StreamWrapperTest extends TestCase
         unlink($file);
     }
 
+    public function testFileExistsReportsMissingEntriesAndFiles(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'ole2-');
+        file_put_contents($file, FixtureBuilder::regular());
+        StreamWrapper::register();
+
+        self::assertTrue(file_exists(StreamWrapper::url($file, 'Data')));
+        self::assertTrue(file_exists(StreamWrapper::directoryUrl($file)));
+        self::assertFalse(file_exists(StreamWrapper::url($file, 'Missing')));
+        self::assertFalse(file_exists(StreamWrapper::directoryUrl($file, 'Missing')));
+        self::assertFalse(file_exists(StreamWrapper::url('/file/does/not/exist.cfb', 'Data')));
+        unlink($file);
+    }
+
     public function testSupportsFragmentStyleUrl(): void
     {
         $file = tempnam(sys_get_temp_dir(), 'ole2-');
