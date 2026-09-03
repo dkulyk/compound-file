@@ -9,7 +9,7 @@ final class PathNormalizer
 {
     public static function normalize(string $path): string
     {
-        return mb_strtolower(str_replace('\\', '/', trim($path, '/\\')), 'UTF-8');
+        return self::fold(str_replace('\\', '/', trim($path, '/\\')));
     }
 
     public static function fold(string $value): string

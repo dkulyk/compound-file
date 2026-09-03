@@ -83,6 +83,14 @@ final class ValidationTest extends TestCase
         $this->parse($bytes)->getStreamContents('Small');
     }
 
+    public function testAllowsRootMiniStreamSizeLargerThanItsFatChain(): void
+    {
+        $bytes = substr_replace(FixtureBuilder::mini(), pack('V2', 1024, 0), 512 + 120, 8);
+        $file = $this->parse($bytes);
+
+        self::assertSame(str_repeat('mini-', 20), $file->getStreamContents('Small'));
+    }
+
     public function testRejectsMiniFatReferenceOutsideMiniStream(): void
     {
         $bytes = substr_replace(FixtureBuilder::mini(), pack('V', 127), 1024, 4);

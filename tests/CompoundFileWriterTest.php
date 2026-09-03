@@ -420,14 +420,16 @@ final class CompoundFileWriterTest extends TestCase
         $writer->setStreamContents('Storage', 'x');
     }
 
-    public function testRejectsEquivalentCfbfSiblingNames(): void
+    public function testEquivalentCfbfNamesAddressTheSameRegistryEntry(): void
     {
         $writer = CompoundFileWriter::create();
         $writer->setStreamContents('Straße', 'one');
         $writer->setStreamContents('STRASSE', 'two');
 
-        $this->expectException(CfbfException::class);
-        $this->roundTrip($writer);
+        self::assertTrue($writer->hasEntry('straße'));
+        self::assertTrue($writer->hasEntry('strasse'));
+        self::assertSame(['', 'STRASSE'], $writer->getEntryPaths());
+        self::assertSame('two', $this->roundTrip($writer)->getStreamContents('Straße'));
     }
 
     public function testRejectsInvalidWriterConfigurationAndMetadata(): void

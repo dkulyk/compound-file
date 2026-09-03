@@ -99,7 +99,7 @@ final class CompoundFile
         return $this->entries[$id] ?? null;
     }
 
-    /** Returns all non-empty directory entries, including the root entry.
+    /** Returns all directory entries reachable from the root tree, including the root entry.
      * @return list<DirectoryEntry>
      */
     public function getEntries(): array
@@ -307,7 +307,9 @@ final class CompoundFile
         }
         $root = $this->root;
         if ($root->getSize() > 0) {
-            $this->miniStream = $this->readRegularChain($root->getStartSector(), $root->getSize());
+            $sectors = $this->chain($root->getStartSector(), $this->fat);
+            $available = count($sectors) * $this->sectorSize;
+            $this->miniStream = $this->readSectorRuns($sectors, 0, min($root->getSize(), $available));
         }
         $ancestors = [];
         $this->indexDirectoryTree($root->childId, '', $ancestors);

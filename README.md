@@ -315,7 +315,7 @@ The returned arrays are diagnostic snapshots and cannot mutate parser state.
 | `getMajorVersion(): int` | Return the CFBF major version (`3` or `4`). |
 | `getHeader(): Header` | Return immutable header metadata. |
 | `getAllocationTable(): AllocationTable` | Return allocation-table snapshots. |
-| `getEntries(): array` | Return all non-empty entries, including the root. |
+| `getEntries(): array` | Return entries reachable from the root directory tree, including the root. |
 | `getChildren(string $storage = ''): array` | Return direct children of a storage. |
 | `getEntryById(int $id): ?DirectoryEntry` | Find an entry by raw SID. |
 | `findEntry(string $path): ?DirectoryEntry` | Find an entry by path. |

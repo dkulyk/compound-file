@@ -19,6 +19,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Copy imported regular streams in 1 MiB blocks instead of one sector at a
   time, substantially improving full-file rewrite throughput.
 
+### Fixed
+
+- Tolerate a root mini-stream size larger than its available FAT chain while
+  retaining strict bounds checks for individual mini-stream reads.
+- Use the same CFBF uppercase folding for path registries and directory-tree
+  ordering, so equivalent names such as `Straße` and `STRASSE` cannot diverge.
+
 ## [0.2.4] - 2026-09-03
 
 ### Security
