@@ -6,6 +6,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.5] - 2026-09-03
+
 ### Added
 
 - Expose the version 4 directory-sector count through `Header`.
@@ -138,7 +140,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial CFBF reader with FAT, DIFAT, mini-FAT, endian-aware parsing, Unicode
   names, resource input, and the read-only `ole2://` stream wrapper.
 
-[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.4...HEAD
+[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.5...HEAD
+[0.2.5]: https://github.com/dkulyk/compound-file/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dkulyk/compound-file/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/dkulyk/compound-file/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/dkulyk/compound-file/compare/v0.2.1...v0.2.2
