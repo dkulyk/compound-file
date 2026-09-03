@@ -104,6 +104,45 @@ final class ValidationTest extends TestCase
         self::assertSame(str_repeat('fragmented-', 10), $this->parse(FixtureBuilder::fragmentedMini())->getStreamContents('Small'));
     }
 
+    public function testIgnoresFileTimeValuesOutsideThePhpIntegerRange(): void
+    {
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('V2', 0xFFFFFFFF, 0xFFFFFFFF), self::DIRECTORY_SECOND_ENTRY + 100, 8);
+        $file = $this->parse($bytes);
+        $entry = $file->findEntry('Data');
+
+        self::assertNotNull($entry);
+        self::assertNull($entry->getCreationTime());
+        self::assertNull($entry->getCreationFileTimeTicks());
+        self::assertSame(str_repeat('OLE2', 1024), $file->getStreamContents('Data'));
+    }
+
+    public function testIndexesDegenerateSiblingListsWithoutRecursion(): void
+    {
+        $count = 1500;
+        $writer = CompoundFileWriter::create();
+        for ($index = 0; $index < $count; $index++) {
+            $writer->setStreamContents(sprintf('Entry %04d', $index), (string) $index);
+        }
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        $writer->saveToResource($resource);
+        rewind($resource);
+        $bytes = stream_get_contents($resource);
+        self::assertIsString($bytes);
+        $directory = 512 + CompoundFile::fromResource($resource)->getHeader()->getDirectoryStartSector() * 512;
+
+        // Relink every entry as one long right-sibling list under the root.
+        $bytes = substr_replace($bytes, pack('V', 1), $directory + 76, 4);
+        for ($id = 1; $id <= $count; $id++) {
+            $links = pack('V2', 0xFFFFFFFF, $id < $count ? $id + 1 : 0xFFFFFFFF);
+            $bytes = substr_replace($bytes, $links, $directory + $id * 128 + 68, 8);
+        }
+
+        $file = $this->parse($bytes);
+        self::assertCount($count + 1, $file->getEntries());
+        self::assertSame('1499', $file->getStreamContents('Entry 1499'));
+    }
+
     public function testRejectsDirectoryTreeCycle(): void
     {
         $bytes = FixtureBuilder::regular();

@@ -27,6 +27,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retaining strict bounds checks for individual mini-stream reads.
 - Use the same CFBF uppercase folding for path registries and directory-tree
   ordering, so equivalent names such as `Straße` and `STRASSE` cannot diverge.
+- Return `false` from the stream wrapper `url_stat()` for missing entries, so
+  `file_exists()` no longer reports absent streams and storages as present.
+- Decode FILETIME values outside the PHP integer range as unset instead of
+  rejecting the whole container with a misleading stream-size error.
+- Index the directory tree with an explicit stack, so long degenerate sibling
+  lists cannot exhaust the call stack or trip Xdebug nesting limits.
 
 ## [0.2.4] - 2026-09-03
 

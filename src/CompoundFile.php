@@ -311,8 +311,7 @@ final class CompoundFile
             $available = count($sectors) * $this->sectorSize;
             $this->miniStream = $this->readSectorRuns($sectors, 0, min($root->getSize(), $available));
         }
-        $ancestors = [];
-        $this->indexDirectoryTree($root->childId, '', $ancestors);
+        $this->indexDirectoryTree($root);
         $root->setPath('');
         $this->entriesByPath[''] = $root;
         $reachable = [];
@@ -364,8 +363,8 @@ final class CompoundFile
             $low = $fields['sizeLow'];
             $high = $fields['sizeHigh'];
             $size = $this->majorVersion === 3 ? $low : $this->combine64($low, $high);
-            $creationFileTime = $this->combine64($fields['creationLow'], $fields['creationHigh']);
-            $modifiedFileTime = $this->combine64($fields['modifiedLow'], $fields['modifiedHigh']);
+            $creationFileTime = $this->fileTimeTicks($fields['creationLow'], $fields['creationHigh']);
+            $modifiedFileTime = $this->fileTimeTicks($fields['modifiedLow'], $fields['modifiedHigh']);
             $entry = new DirectoryEntry(
                 $this,
                 $id,
@@ -382,8 +381,8 @@ final class CompoundFile
                 $this->decodeFileTime($modifiedFileTime),
                 $fields['startSector'],
                 $size,
-                $creationFileTime === 0 ? null : $creationFileTime,
-                $modifiedFileTime === 0 ? null : $modifiedFileTime,
+                $creationFileTime,
+                $modifiedFileTime,
             );
             $this->entries[$id] = $entry;
             if ($type === DirectoryEntry::TYPE_ROOT) {
@@ -395,33 +394,40 @@ final class CompoundFile
         }
     }
 
-    /** @param array<int, true> $ancestors */
-    private function indexDirectoryTree(int $id, string $parent, array &$ancestors): void
+    /**
+     * Assigns paths to every entry reachable from the root using an explicit
+     * stack, so degenerate sibling lists cannot exhaust the call stack.
+     */
+    private function indexDirectoryTree(DirectoryEntry $root): void
     {
-        if ($id === self::NONE) {
-            return;
+        $seen = [$root->getId() => true];
+        $stack = [[$root->childId, '']];
+        while ($stack !== []) {
+            [$id, $parent] = array_pop($stack);
+            if ($id === self::NONE) {
+                continue;
+            }
+            if (isset($seen[$id])) {
+                throw new CfbfException('Cycle in directory tree.');
+            }
+            if (!isset($this->entries[$id])) {
+                throw new CfbfException('Directory tree references a missing entry.');
+            }
+            $seen[$id] = true;
+            $entry = $this->entries[$id];
+            $path = $parent === '' ? $entry->getName() : $parent.'/'.$entry->getName();
+            $entry->setPath($path);
+            $normalizedPath = $this->normalizePath($path);
+            if (isset($this->entriesByPath[$normalizedPath])) {
+                throw new CfbfException('Directory contains duplicate entry paths.');
+            }
+            $this->entriesByPath[$normalizedPath] = $entry;
+            $stack[] = [$entry->rightId, $parent];
+            $stack[] = [$entry->leftId, $parent];
+            if ($entry->isStorage()) {
+                $stack[] = [$entry->childId, $path];
+            }
         }
-        if (isset($ancestors[$id])) {
-            throw new CfbfException('Cycle in directory tree.');
-        }
-        if (!isset($this->entries[$id])) {
-            throw new CfbfException('Directory tree references a missing entry.');
-        }
-        $ancestors[$id] = true;
-        $entry = $this->entries[$id];
-        $this->indexDirectoryTree($entry->leftId, $parent, $ancestors);
-        $path = $parent === '' ? $entry->getName() : $parent . '/' . $entry->getName();
-        $entry->setPath($path);
-        $normalizedPath = $this->normalizePath($path);
-        if (isset($this->entriesByPath[$normalizedPath])) {
-            throw new CfbfException('Directory contains duplicate entry paths.');
-        }
-        $this->entriesByPath[$normalizedPath] = $entry;
-        if ($entry->isStorage()) {
-            $this->indexDirectoryTree($entry->childId, $path, $ancestors);
-        }
-        $this->indexDirectoryTree($entry->rightId, $parent, $ancestors);
-        unset($ancestors[$id]);
     }
 
     private function readRegularChain(int $start, ?int $limit = null): string
@@ -647,9 +653,19 @@ final class CompoundFile
         );
     }
 
-    private function decodeFileTime(int $ticks): ?\DateTimeImmutable
+    /** Returns FILETIME ticks, or null when unset or not representable as a PHP integer. */
+    private function fileTimeTicks(int $low, int $high): ?int
     {
-        if ($ticks === 0) {
+        if (($low === 0 && $high === 0) || $high > 0x7FFFFFFF || (PHP_INT_SIZE < 8 && $high !== 0)) {
+            return null;
+        }
+
+        return $high * 4294967296 + $low;
+    }
+
+    private function decodeFileTime(?int $ticks): ?\DateTimeImmutable
+    {
+        if ($ticks === null) {
             return null;
         }
         $wholeSeconds = intdiv($ticks, 10_000_000);
@@ -658,11 +674,7 @@ final class CompoundFile
             'U.u',
             sprintf('%d.%06d', $wholeSeconds - 11_644_473_600, $microseconds),
         );
-        if ($time === false) {
-            throw new CfbfException('Cannot decode a directory FILETIME value.');
-        }
-
-        return $time;
+        return $time === false ? null : $time;
     }
     private function normalizePath(string $path): string
     {
