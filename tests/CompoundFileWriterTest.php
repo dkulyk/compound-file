@@ -233,6 +233,55 @@ final class CompoundFileWriterTest extends TestCase
         }
     }
 
+    public function testNewFilePermissionsRespectTheProcessUmask(): void
+    {
+        if (PHP_OS_FAMILY === 'Windows') {
+            self::markTestSkipped('POSIX permissions are not available on Windows.');
+        }
+        $directory = sys_get_temp_dir().'/compound-permissions-'.bin2hex(random_bytes(6));
+        self::assertTrue(mkdir($directory));
+        $path = $directory.'/new.ole';
+        $previousUmask = umask(0o027);
+        try {
+            $writer = CompoundFileWriter::create();
+            $writer->setStreamContents('Data', 'permissions');
+            $writer->save($path);
+
+            clearstatcache(true, $path);
+            self::assertSame(0o640, fileperms($path) & 0o777);
+        } finally {
+            umask($previousUmask);
+            @unlink($path);
+            @rmdir($directory);
+        }
+    }
+
+    public function testVersionThreeRejectsStreamsAtOrAboveTwoGibibytesBeforeWriting(): void
+    {
+        if (PHP_INT_SIZE < 8) {
+            self::markTestSkipped('Creating a 2 GiB sparse stream requires 64-bit PHP.');
+        }
+        $path = tempnam(sys_get_temp_dir(), 'compound-large-stream-');
+        self::assertIsString($path);
+        $source = fopen($path, 'w+b');
+        self::assertIsResource($source);
+        self::assertTrue(ftruncate($source, 0x80000000));
+        $output = fopen('php://temp', 'w+b');
+        self::assertIsResource($output);
+
+        try {
+            $writer = CompoundFileWriter::create(3);
+            $writer->setStreamResource('Large', $source);
+            $this->expectException(CfbfException::class);
+            $this->expectExceptionMessage('cannot exceed 2 GiB');
+            $writer->saveToResource($output);
+        } finally {
+            fclose($source);
+            fclose($output);
+            @unlink($path);
+        }
+    }
+
     public function testFailedAtomicReplacementRemovesTemporaryFile(): void
     {
         $directory = sys_get_temp_dir().'/compound-target-'.bin2hex(random_bytes(6));

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DK\CompoundFile\Tests;
 
 use DK\CompoundFile\CompoundFile;
+use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\Exception\CfbfException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -41,6 +42,37 @@ final class ValidationTest extends TestCase
 
         $this->expectException(CfbfException::class);
         $this->parse($bytes);
+    }
+
+    public function testRejectsDeclaredFatLargerThanTheFile(): void
+    {
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('V', 12), 44, 4);
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Declared FAT size');
+        $this->parse($bytes);
+    }
+
+    public function testRejectsDuplicateFatSectorReferences(): void
+    {
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('V', 2), 44, 4);
+        $bytes = substr_replace($bytes, pack('V', 1), 80, 4);
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('duplicate FAT sector');
+        $this->parse($bytes);
+    }
+
+    public function testRejectsRegularChainShorterThanDeclaredStreamSize(): void
+    {
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('V', 0xFFFFFFFE), 1024 + 5 * 4, 4);
+        $stream = $this->parse($bytes)->openStream('Data');
+
+        self::assertSame(2048, strlen($stream->read(2048)));
+        self::assertFalse($stream->eof());
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('shorter than the requested byte range');
+        $stream->read(2048);
     }
 
     public function testRejectsMiniFatCycle(): void
@@ -117,6 +149,22 @@ final class ValidationTest extends TestCase
         $this->parse($bytes);
     }
 
+    public function testIgnoresDirectoryEntriesUnreachableFromTheRootTree(): void
+    {
+        $bytes = FixtureBuilder::regular();
+        $orphan = substr($bytes, self::DIRECTORY_SECOND_ENTRY, 128);
+        $orphan = substr_replace($orphan, pack('V', 0), 116, 4);
+        $bytes = substr_replace($bytes, $orphan, self::DIRECTORY_SECOND_ENTRY + 128, 128);
+
+        $file = $this->parse($bytes);
+        self::assertSame(['', 'Data'], array_map(static fn ($entry): string => $entry->getPath(), $file->getEntries()));
+        self::assertNull($file->getEntryById(2));
+
+        $rewritten = $this->roundTrip(CompoundFileWriter::fromCompoundFile($file));
+        self::assertSame(str_repeat('OLE2', 1024), $rewritten->getStreamContents('Data'));
+        self::assertCount(2, $rewritten->getEntries());
+    }
+
     /** @return iterable<string, array{int, string}> */
     public static function invalidDirectoryEntryProvider(): iterable
     {
@@ -138,6 +186,16 @@ final class ValidationTest extends TestCase
         $resource = fopen('php://temp', 'w+b');
         self::assertIsResource($resource);
         fwrite($resource, $bytes);
+        rewind($resource);
+
+        return CompoundFile::fromResource($resource);
+    }
+
+    private function roundTrip(CompoundFileWriter $writer): CompoundFile
+    {
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        $writer->saveToResource($resource);
         rewind($resource);
 
         return CompoundFile::fromResource($resource);

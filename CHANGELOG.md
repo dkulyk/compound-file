@@ -6,6 +6,21 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+
+- Bound declared FAT data by the input file size and reject duplicate FAT
+  sector references, preventing disproportionate memory allocation from a
+  small malicious container.
+
+### Fixed
+
+- Reject regular FAT chains that end before the requested stream range.
+- Exclude unreachable directory entries so rewriting cannot resurrect orphaned
+  or shadowing streams.
+- Apply `0666 & ~umask()` permissions when saving a new filesystem file.
+- Reject version 3 streams larger than the 2 GiB specification limit before
+  allocating tables or copying stream bytes.
+
 ## [0.2.3] - 2026-09-02
 
 ### Added
