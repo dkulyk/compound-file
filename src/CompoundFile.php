@@ -43,7 +43,13 @@ final class CompoundFile
     /** @var array<string, list<DirectoryEntry>> */
     private array $childrenByPath = [];
     private ?DirectoryEntry $root = null;
-    private string $miniStream = '';
+    private const MINI_STREAM_BLOCK_SIZE = 65536;
+    private const MINI_STREAM_CACHE_BLOCKS = 16;
+    private int $miniStreamSize = 0;
+    /** @var list<int> */
+    private array $miniStreamSectors = [];
+    /** @var array<int, string> Bounded FIFO cache of mini-stream payload blocks. */
+    private array $miniStreamBlocks = [];
     /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
     private array $regularChainCache = [];
     /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
@@ -170,7 +176,7 @@ final class CompoundFile
             return '';
         }
         if ($size < $this->miniCutoff) {
-            return $this->readChainRange($this->miniStream, $this->miniFat, $this->miniSectorSize, $entry->getStartSector(), $offset, $length);
+            return $this->readChainRange($this->miniFat, $this->miniSectorSize, $entry->getStartSector(), $offset, $length);
         }
         return $this->readRegularChainRange($entry->getStartSector(), $offset, $length);
     }
@@ -298,7 +304,20 @@ final class CompoundFile
         if ($root->getSize() > 0) {
             $sectors = $this->chain($root->getStartSector(), $this->fat);
             $available = count($sectors) * $this->sectorSize;
-            $this->miniStream = $this->readSectorRuns($sectors, 0, min($root->getSize(), $available));
+            $this->miniStreamSize = min($root->getSize(), $available);
+            $this->miniStreamSectors = $sectors;
+            // Retain eager bounds validation without loading the payload.
+            $remaining = $this->miniStreamSize;
+            foreach ($sectors as $sector) {
+                if ($remaining === 0) {
+                    break;
+                }
+                $length = min($remaining, $this->sectorSize);
+                if ($this->sectorOffset($sector) > $this->reader->size() - $length) {
+                    throw new CfbfException('Attempted to read outside the compound file.');
+                }
+                $remaining -= $length;
+            }
         }
         $this->indexDirectoryTree($root);
         $root->setPath('');
@@ -482,7 +501,7 @@ final class CompoundFile
     }
 
     /** @param array<int, int> $table */
-    private function readChainRange(string $source, array $table, int $unitSize, int $start, int $offset, int $length): string
+    private function readChainRange(array $table, int $unitSize, int $start, int $offset, int $length): string
     {
         $first = intdiv($offset, $unitSize);
         $inside = $offset % $unitSize;
@@ -490,17 +509,28 @@ final class CompoundFile
         $units = $this->chainRange($start, $table, $this->miniChainCache, $first, $count);
 
         $result = '';
-        foreach ($units as $unit) {
-            if ($unit < 0 || $unit > intdiv(strlen($source), $unitSize) - 1) {
+        $unitCount = count($units);
+        $unitsPerBlock = intdiv(self::MINI_STREAM_BLOCK_SIZE, $unitSize);
+        for ($index = 0; $index < $unitCount;) {
+            $unit = $units[$index];
+            $run = 1;
+            while (
+                $index + $run < $unitCount
+                && $units[$index + $run] === $unit + $run
+                && intdiv($unit + $run, $unitsPerBlock) === intdiv($unit, $unitsPerBlock)
+            ) {
+                $run++;
+            }
+            if ($unit < 0 || $unit + $run > intdiv($this->miniStreamSize, $unitSize)) {
                 throw new CfbfException('Mini-sector chain references data outside the mini-stream.');
             }
-            $available = $unitSize - $inside;
-            $result .= substr(
-                $source,
+            $available = $run * $unitSize - $inside;
+            $result .= $this->readMiniStreamRange(
                 $unit * $unitSize + $inside,
                 min($available, $length - strlen($result)),
             );
             $inside = 0;
+            $index += $run;
             if (strlen($result) >= $length) {
                 break;
             }
@@ -509,6 +539,26 @@ final class CompoundFile
             throw new CfbfException('Sector chain is shorter than the declared stream size.');
         }
         return $result;
+    }
+
+    /** Reads a run of mini-sectors contained within one cache block. */
+    private function readMiniStreamRange(int $offset, int $length): string
+    {
+        $block = intdiv($offset, self::MINI_STREAM_BLOCK_SIZE);
+        if (!isset($this->miniStreamBlocks[$block])) {
+            if (count($this->miniStreamBlocks) >= self::MINI_STREAM_CACHE_BLOCKS) {
+                unset($this->miniStreamBlocks[array_key_first($this->miniStreamBlocks)]);
+            }
+            $blockOffset = $block * self::MINI_STREAM_BLOCK_SIZE;
+            $blockLength = min(self::MINI_STREAM_BLOCK_SIZE, $this->miniStreamSize - $blockOffset);
+            $sectors = array_slice(
+                $this->miniStreamSectors,
+                intdiv($blockOffset, $this->sectorSize),
+                intdiv($blockLength + $this->sectorSize - 1, $this->sectorSize),
+            );
+            $this->miniStreamBlocks[$block] = $this->readSectorRuns($sectors, 0, $blockLength);
+        }
+        return substr($this->miniStreamBlocks[$block], $offset % self::MINI_STREAM_BLOCK_SIZE, $length);
     }
 
     /**
