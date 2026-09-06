@@ -6,15 +6,37 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.6] - 2026-09-06
+
+### Added
+
+- Synthetic time and memory benchmark scenarios covering many storages, many
+  mini-streams, and one large stream. Each measured operation runs in a fresh
+  process with Xdebug disabled, and re-reading is measured separately from the
+  first read.
+
 ### Changed
 
+- Read the mini-stream payload on demand in 64 KiB blocks, capped at 1 MiB per
+  parser, instead of loading it in full when opening a container.
 - Bound the resolved sector-chain caches to 1,024 chains and 32,768 sectors,
   evicting the least recently inserted chains first. Reading 8,000 mini-streams
   from one parser now retains 4 MiB instead of 35 MiB.
 - Drop the chain and mini-stream caches in `CompoundFile::close()`, so the
   retained memory is released without waiting for cycle collection.
-- Add a re-read scenario to the synthetic benchmarks, measuring reads that
-  resolve chains again after eviction.
+- Index storage children while parsing, so `getChildren()` no longer scans
+  every directory entry.
+
+### Fixed
+
+- Release the compound file handle as soon as a wrapper stream is closed, and
+  when a stat call or directory listing finishes.
+- Return `false` from the stream wrapper `url_stat()` for missing entries, so
+  `file_exists()` no longer reports absent streams and storages as present.
+- Decode FILETIME values outside the PHP integer range as unset instead of
+  rejecting the whole container with a misleading stream-size error.
+- Index the directory tree with an explicit stack, so long degenerate sibling
+  lists cannot exhaust the call stack or trip Xdebug nesting limits.
 
 ## [0.2.5] - 2026-09-03
 
@@ -37,12 +59,6 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   retaining strict bounds checks for individual mini-stream reads.
 - Use the same CFBF uppercase folding for path registries and directory-tree
   ordering, so equivalent names such as `Straße` and `STRASSE` cannot diverge.
-- Return `false` from the stream wrapper `url_stat()` for missing entries, so
-  `file_exists()` no longer reports absent streams and storages as present.
-- Decode FILETIME values outside the PHP integer range as unset instead of
-  rejecting the whole container with a misleading stream-size error.
-- Index the directory tree with an explicit stack, so long degenerate sibling
-  lists cannot exhaust the call stack or trip Xdebug nesting limits.
 
 ## [0.2.4] - 2026-09-03
 
@@ -156,7 +172,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial CFBF reader with FAT, DIFAT, mini-FAT, endian-aware parsing, Unicode
   names, resource input, and the read-only `ole2://` stream wrapper.
 
-[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/dkulyk/compound-file/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/dkulyk/compound-file/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dkulyk/compound-file/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/dkulyk/compound-file/compare/v0.2.2...v0.2.3
