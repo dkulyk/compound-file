@@ -92,6 +92,13 @@ if ($entry !== null && $entry->isStream()) {
 
 ### Incremental reading
 
+Small streams are read through a shared mini-stream payload cache, populated
+on demand in 64 KiB blocks and limited to 1 MiB per parser. Opening a file still
+loads allocation tables and directory metadata and validates the root sector
+chain, but does not load the complete mini-stream payload. The cache limit is
+not a limit on total parser memory: allocation tables and chain indexes also
+consume memory.
+
 ```php
 $stream = $file->openStream('WordDocument');
 
