@@ -34,6 +34,11 @@ function child(array $arguments): array
 
 function worker(string $operation, string $scenario, string $path, int $count): array
 {
+    if (extension_loaded('xdebug') && version_compare(phpversion('xdebug'), '3.1', '<')) {
+        throw new RuntimeException('Benchmark workers require Xdebug 3.1+ or no Xdebug extension.');
+    }
+    // The mode category returns an array without output (Xdebug 3.1+).
+    // https://xdebug.org/docs/all_functions#xdebug_info
     if (function_exists('xdebug_info') && xdebug_info('mode') !== []) {
         throw new RuntimeException('Benchmark workers require XDEBUG_MODE=off.');
     }
@@ -80,9 +85,10 @@ function worker(string $operation, string $scenario, string $path, int $count): 
                     }
                 }
             } elseif ($scenario === 'mini-streams') {
+                $expected = str_repeat('m', 3000);
                 for ($i = 0; $i < $count; $i++) {
                     $data = $file->getStreamContents('S'.$i);
-                    if ($data !== str_repeat('m', 3000)) {
+                    if ($data !== $expected) {
                         throw new RuntimeException('Incorrect mini-stream contents.');
                     }
                     $bytes += strlen($data);
@@ -167,7 +173,9 @@ try {
                 ];
             }
         } finally {
-            unlink($path);
+            if (is_file($path)) {
+                unlink($path);
+            }
         }
     }
     if (in_array('--json', $arguments, true)) {

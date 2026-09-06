@@ -45,7 +45,9 @@ The default suite generates 2,000 storages with one stream each, 10,000
 measures opening, reading (enumerating children for the directory scenario),
 and rewriting. Each operation runs three times in fresh PHP processes with
 `XDEBUG_MODE=off`; fixture generation runs separately and temporary files are
-removed afterward. `--quick` uses 100 storages, 100 mini-streams, and 4 MiB.
+removed afterward. If Xdebug is installed, version 3.1+ is required to inspect
+its active modes without producing diagnostic output. Older versions are rejected.
+`--quick` uses 100 storages, 100 mini-streams, and 4 MiB.
 
 Reports include median elapsed time and maximum PHP allocator peak memory,
 plus all individual samples in JSON. Peaks include PHP startup, autoloading,
