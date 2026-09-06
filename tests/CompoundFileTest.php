@@ -5,11 +5,53 @@ declare(strict_types=1);
 namespace DK\CompoundFile\Tests;
 
 use DK\CompoundFile\CompoundFile;
+use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\Exception\CfbfException;
 use PHPUnit\Framework\TestCase;
 
 final class CompoundFileTest extends TestCase
 {
+    public function testChildrenPreserveRecordOrderAndNormalizedStorageLookup(): void
+    {
+        $writer = CompoundFileWriter::create();
+        $writer->createStorage('Ünicode/Nested');
+        $writer->createStorage('Empty');
+        foreach (['Zulu', 'Alpha', 'Beta'] as $name) {
+            $writer->setStreamContents('Ünicode/'.$name, $name);
+        }
+        $writer->setStreamContents('Ünicode/Nested/Leaf', 'leaf');
+        $resource = fopen('php://temp', 'w+b');
+        $writer->saveToResource($resource);
+        $file = CompoundFile::fromResource($resource);
+        try {
+            $expected = array_values(array_filter(
+                $file->getEntries(),
+                static fn ($entry): bool => in_array($entry->getPath(), [
+                    'Ünicode/Zulu', 'Ünicode/Alpha', 'Ünicode/Beta', 'Ünicode/Nested',
+                ], true),
+            ));
+            self::assertCount(4, $expected);
+            self::assertSame($expected, $file->getChildren('/ünICODE/'));
+            self::assertSame([$file->findEntry('Ünicode/Nested/Leaf')], $file->getChildren('ünicode\\nested'));
+            self::assertSame([], $file->getChildren('Empty'));
+            self::assertCount(2, $file->getChildren());
+            $children = $file->getChildren('Ünicode');
+            array_pop($children);
+            self::assertSame($expected, $file->getChildren('Ünicode'));
+            foreach (['Missing', 'Ünicode/Alpha'] as $path) {
+                try {
+                    $file->getChildren($path);
+                    self::fail('Missing entries and streams must not be accepted as storages.');
+                } catch (CfbfException $exception) {
+                    self::assertStringContainsString('does not exist', $exception->getMessage());
+                }
+            }
+        } finally {
+            $file->close();
+            fclose($resource);
+        }
+    }
+
     public function testReadsRegularFatStreamAndSeeks(): void
     {
         $resource = fopen('php://temp', 'w+b');
