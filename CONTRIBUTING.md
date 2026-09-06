@@ -32,6 +32,34 @@ composer benchmark
 composer benchmark -- /path/to/document.xls
 ```
 
+Run the synthetic time and memory scenarios with:
+
+```bash
+composer benchmark:scenarios
+composer benchmark:scenarios -- --json
+composer benchmark:scenarios -- --quick
+```
+
+The default suite generates 2,000 storages with one stream each, 10,000
+3,000-byte mini-streams, and one 64 MiB resource-backed stream. Each scenario
+measures opening, reading (enumerating children for the directory scenario),
+and rewriting. Each operation runs three times in fresh PHP processes with
+`XDEBUG_MODE=off`; fixture generation runs separately and temporary files are
+removed afterward. If Xdebug is installed, version 3.1+ is required to inspect
+its active modes without producing diagnostic output. Older versions are rejected.
+`--quick` uses 100 storages, 100 mini-streams, and 4 MiB.
+
+Reports include median elapsed time and maximum PHP allocator peak memory,
+plus all individual samples in JSON. Peaks include PHP startup, autoloading,
+and opening the input, but exclude fixture generation; they are not OS RSS.
+Read/rewrite timing excludes opening the input (reported separately in each
+sample), but includes content validation for reads and output setup/flush/close
+for rewrites. Large streams are read in 1 MiB chunks. Rewrite output uses a
+temporary disk file. Filesystem caches are not cleared, so results do not
+represent cold-disk performance. Compare runs on the same PHP build and machine;
+there are no timing thresholds in unit tests. The scheduled benchmark workflow
+uploads `benchmark-scenarios.json` alongside the real-file corpus results.
+
 Run the optional LibreOffice writer interoperability test with:
 
 ```bash

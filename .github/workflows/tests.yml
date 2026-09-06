@@ -43,6 +43,8 @@ jobs:
         with: {php-version: '${{ matrix.php }}', coverage: none}
       - run: composer update --prefer-dist --no-interaction
       - run: composer test
+      - name: Smoke-test isolated benchmark workers
+        run: composer benchmark:scenarios -- --quick --json
 
   lowest:
     name: Lowest dependencies on PHP 8.1
