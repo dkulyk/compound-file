@@ -25,6 +25,7 @@
         ],
         "analyse": "phpstan analyse --no-progress --debug",
         "benchmark": "@php tools/benchmark.php",
+        "benchmark:scenarios": "@php tools/benchmark-scenarios.php",
         "quality": ["@composer validate --strict", "@lint", "@analyse"],
         "check": ["@quality", "@test"],
         "format": "php-cs-fixer fix --sequential",

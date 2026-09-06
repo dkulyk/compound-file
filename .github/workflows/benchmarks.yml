@@ -40,6 +40,8 @@ jobs:
             benchmark-corpus/not.xls \
             benchmark-corpus/vba_endFunction.xls \
             > benchmark.json
+      - name: Measure synthetic scenarios
+        run: php tools/benchmark-scenarios.php --json > benchmark-scenarios.json
       - name: Publish run summary
         run: |
           echo '## Reader benchmark' >> "$GITHUB_STEP_SUMMARY"
@@ -52,4 +54,5 @@ jobs:
           path: |
             benchmark.txt
             benchmark.json
+            benchmark-scenarios.json
           retention-days: 90
