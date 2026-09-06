@@ -40,6 +40,8 @@ final class CompoundFile
     private array $entries = [];
     /** @var array<string, DirectoryEntry> */
     private array $entriesByPath = [];
+    /** @var array<string, list<DirectoryEntry>> */
+    private array $childrenByPath = [];
     private ?DirectoryEntry $root = null;
     private string $miniStream = '';
     /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
@@ -130,26 +132,13 @@ final class CompoundFile
      */
     public function getChildren(string $storagePath = ''): array
     {
-        $storage = $this->findEntry($storagePath);
+        $key = $this->normalizePath($storagePath);
+        $storage = $this->entriesByPath[$key] ?? null;
         if ($storage === null || !$storage->isStorage()) {
             throw new CfbfException(sprintf('Storage "%s" does not exist.', $storagePath));
         }
 
-        $normalizedParent = $this->normalizePath($storagePath);
-        $children = [];
-        foreach ($this->entries as $entry) {
-            if ($entry === $this->root) {
-                continue;
-            }
-            $entryPath = $this->normalizePath($entry->getPath());
-            $separator = strrpos($entryPath, '/');
-            $parent = $separator === false ? '' : substr($entryPath, 0, $separator);
-            if ($parent === $normalizedParent) {
-                $children[] = $entry;
-            }
-        }
-
-        return $children;
+        return $this->childrenByPath[$key] ?? [];
     }
 
     /** Opens a named stream for incremental, seekable reading. */
@@ -319,6 +308,16 @@ final class CompoundFile
             $reachable[$entry->getId()] = true;
         }
         $this->entries = array_intersect_key($this->entries, $reachable);
+        // Preserve directory-record order, as exposed by getEntries().
+        foreach ($this->entries as $entry) {
+            if ($entry === $root) {
+                continue;
+            }
+            $path = $this->normalizePath($entry->getPath());
+            $separator = strrpos($path, '/');
+            $parent = $separator === false ? '' : substr($path, 0, $separator);
+            $this->childrenByPath[$parent][] = $entry;
+        }
     }
 
     private function parseDirectory(string $bytes): void
