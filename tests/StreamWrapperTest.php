@@ -5,10 +5,57 @@ declare(strict_types=1);
 namespace DK\CompoundFile\Tests;
 
 use DK\CompoundFile\StreamWrapper;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 
 final class StreamWrapperTest extends TestCase
 {
+    #[RunInSeparateProcess]
+    public function testOperationsReleaseFileHandlesWithoutGarbageCollection(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'ole2-');
+        file_put_contents($file, FixtureBuilder::regular());
+        StreamWrapper::register();
+        gc_collect_cycles();
+        $gcEnabled = gc_enabled();
+        gc_disable();
+        $baseline = count(get_resources('stream'));
+
+        try {
+            for ($iteration = 0; $iteration < 100; $iteration++) {
+                $handle = fopen(StreamWrapper::url($file, 'Data'), 'rb');
+                self::assertIsResource($handle);
+                self::assertSame('OLE2', fread($handle, 4));
+                fclose($handle);
+                self::assertCount($baseline, get_resources('stream'), 'fclose must release the underlying file.');
+
+                self::assertFalse(@fopen(StreamWrapper::url($file, 'Missing'), 'rb'));
+                self::assertCount($baseline, get_resources('stream'), 'Failed stream opens must release the file.');
+
+                clearstatcache();
+                self::assertTrue(file_exists(StreamWrapper::url($file, 'Data')));
+                self::assertFalse(file_exists(StreamWrapper::url($file, 'Missing')));
+                self::assertCount($baseline, get_resources('stream'), 'Stat calls must release the file.');
+
+                $directory = opendir(StreamWrapper::directoryUrl($file));
+                self::assertIsResource($directory);
+                self::assertCount($baseline + 1, get_resources('stream'), 'Only the directory wrapper should remain open.');
+                self::assertSame('.', readdir($directory));
+                self::assertSame('..', readdir($directory));
+                self::assertSame('Data', readdir($directory));
+                closedir($directory);
+                self::assertFalse(@opendir(StreamWrapper::directoryUrl($file, 'Missing')));
+                self::assertCount($baseline, get_resources('stream'), 'Directory operations must release the file.');
+            }
+        } finally {
+            if ($gcEnabled) {
+                gc_enable();
+            }
+            gc_collect_cycles();
+            unlink($file);
+        }
+    }
+
     public function testNativePhpStreamAccess(): void
     {
         $file = tempnam(sys_get_temp_dir(), 'ole2-');

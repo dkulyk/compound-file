@@ -13,6 +13,7 @@ final class StreamWrapper
 {
     public mixed $context = null;
     private Stream $stream;
+    private ?CompoundFile $file = null;
     /** @var list<string> */
     private array $directoryEntries = [];
     private int $directoryPosition = 0;
@@ -48,11 +49,20 @@ final class StreamWrapper
             return false;
         }
         try {
-            $this->stream = CompoundFile::open($location['file'])->openStream($location['entry']);
+            $this->file = CompoundFile::open($location['file']);
+            $this->stream = $this->file->openStream($location['entry']);
             return true;
         } catch (\Throwable $e) {
+            $this->stream_close();
             return false;
         }
+    }
+    /** @internal */
+    public function stream_close(): void
+    {
+        $this->file?->close();
+        $this->file = null;
+        unset($this->stream);
     }
     /** @internal */ public function stream_read(int $count): string
     {
@@ -94,8 +104,10 @@ final class StreamWrapper
         if ($location === null) {
             return false;
         }
+        $file = null;
         try {
-            $entry = CompoundFile::open($location['file'])->findEntry($location['entry']);
+            $file = CompoundFile::open($location['file']);
+            $entry = $file->findEntry($location['entry']);
             if ($entry === null) {
                 return false;
             }
@@ -103,6 +115,8 @@ final class StreamWrapper
             return ['size' => $entry->getSize(), 7 => $entry->getSize(), 'mode' => $mode, 2 => $mode];
         } catch (\Throwable $exception) {
             return false;
+        } finally {
+            $file?->close();
         }
     }
 
@@ -113,8 +127,10 @@ final class StreamWrapper
         if ($location === null) {
             return false;
         }
+        $file = null;
         try {
-            $children = CompoundFile::open($location['file'])->getChildren($location['entry']);
+            $file = CompoundFile::open($location['file']);
+            $children = $file->getChildren($location['entry']);
             $this->directoryEntries = ['.', '..'];
             foreach ($children as $child) {
                 $this->directoryEntries[] = $child->getName();
@@ -123,6 +139,8 @@ final class StreamWrapper
             return true;
         } catch (\Throwable $exception) {
             return false;
+        } finally {
+            $file?->close();
         }
     }
 
