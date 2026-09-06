@@ -95,9 +95,16 @@ if ($entry !== null && $entry->isStream()) {
 Small streams are read through a shared mini-stream payload cache, populated
 on demand in 64 KiB blocks and limited to 1 MiB per parser. Opening a file still
 loads allocation tables and directory metadata and validates the root sector
-chain, but does not load the complete mini-stream payload. The cache limit is
-not a limit on total parser memory: allocation tables and chain indexes also
-consume memory.
+chain, but does not load the complete mini-stream payload. Resolved sector chains are cached
+under their own budget of 1,024 chains and 32,768 sectors, so reading many
+streams from one parser does not grow the cache without limit. The chain being
+read is exempt from that budget, so a single very long chain can exceed it
+while it is in use. Neither limit bounds total parser memory: the allocation
+tables themselves scale with the file size.
+
+`close()` drops both caches. Directory entries reference the parser, so an
+abandoned parser is only reclaimed by PHP's cycle collector; calling `close()`
+releases the cached bytes immediately.
 
 ```php
 $stream = $file->openStream('WordDocument');

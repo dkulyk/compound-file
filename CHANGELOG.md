@@ -6,6 +6,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Bound the resolved sector-chain caches to 1,024 chains and 32,768 sectors,
+  evicting the least recently inserted chains first. Reading 8,000 mini-streams
+  from one parser now retains 4 MiB instead of 35 MiB.
+- Drop the chain and mini-stream caches in `CompoundFile::close()`, so the
+  retained memory is released without waiting for cycle collection.
+- Add a re-read scenario to the synthetic benchmarks, measuring reads that
+  resolve chains again after eviction.
+
 ## [0.2.5] - 2026-09-03
 
 ### Added

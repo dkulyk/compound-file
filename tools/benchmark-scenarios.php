@@ -77,33 +77,46 @@ function worker(string $operation, string $scenario, string $path, int $count): 
     $started = hrtime(true);
     $bytes = 0;
     try {
-        if ($operation === 'read') {
-            if ($scenario === 'directories') {
-                for ($i = 0; $i < $count; $i++) {
-                    if (count($file->getChildren('D'.$i)) !== 1) {
-                        throw new RuntimeException('Unexpected directory child count.');
-                    }
+        if ($operation === 'read' || $operation === 'reread') {
+            // 'reread' times only the second pass, which runs after the first
+            // pass pushed every chain out of the bounded caches. Reversing the
+            // order defeats the FIFO policy, so nothing survives eviction.
+            $passes = $operation === 'reread' ? 2 : 1;
+            for ($pass = 0; $pass < $passes; $pass++) {
+                if ($pass === 1) {
+                    $started = hrtime(true);
+                    $bytes = 0;
                 }
-            } elseif ($scenario === 'mini-streams') {
-                $expected = str_repeat('m', 3000);
-                for ($i = 0; $i < $count; $i++) {
-                    $data = $file->getStreamContents('S'.$i);
-                    if ($data !== $expected) {
-                        throw new RuntimeException('Incorrect mini-stream contents.');
+                $reverse = $pass === 1;
+                if ($scenario === 'directories') {
+                    for ($i = 0; $i < $count; $i++) {
+                        $index = $reverse ? $count - 1 - $i : $i;
+                        if (count($file->getChildren('D'.$index)) !== 1) {
+                            throw new RuntimeException('Unexpected directory child count.');
+                        }
                     }
-                    $bytes += strlen($data);
-                }
-            } else {
-                $stream = $file->openStream('Payload');
-                while (!$stream->eof()) {
-                    $data = $stream->read(1048576);
-                    if ($data === '' || strspn($data, "\0") !== strlen($data)) {
-                        throw new RuntimeException('Incorrect large-stream contents.');
+                } elseif ($scenario === 'mini-streams') {
+                    $expected = str_repeat('m', 3000);
+                    for ($i = 0; $i < $count; $i++) {
+                        $index = $reverse ? $count - 1 - $i : $i;
+                        $data = $file->getStreamContents('S'.$index);
+                        if ($data !== $expected) {
+                            throw new RuntimeException('Incorrect mini-stream contents.');
+                        }
+                        $bytes += strlen($data);
                     }
-                    $bytes += strlen($data);
-                }
-                if ($bytes !== $count) {
-                    throw new RuntimeException('Incorrect large-stream byte count.');
+                } else {
+                    $stream = $file->openStream('Payload');
+                    while (!$stream->eof()) {
+                        $data = $stream->read(1048576);
+                        if ($data === '' || strspn($data, "\0") !== strlen($data)) {
+                            throw new RuntimeException('Incorrect large-stream contents.');
+                        }
+                        $bytes += strlen($data);
+                    }
+                    if ($bytes !== $count) {
+                        throw new RuntimeException('Incorrect large-stream byte count.');
+                    }
                 }
             }
         } elseif ($operation === 'rewrite') {
@@ -155,7 +168,7 @@ try {
         }
         try {
             $fixture = child(['--worker', 'generate', $scenario, $path, (string) $count]);
-            foreach (['open', 'read', 'rewrite'] as $operation) {
+            foreach (['open', 'read', 'reread', 'rewrite'] as $operation) {
                 $samples = [];
                 for ($i = 0; $i < 3; $i++) {
                     $samples[] = child(['--worker', $operation, $scenario, $path, (string) $count]);

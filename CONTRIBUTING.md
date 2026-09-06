@@ -43,7 +43,10 @@ composer benchmark:scenarios -- --quick
 The default suite generates 2,000 storages with one stream each, 10,000
 3,000-byte mini-streams, and one 64 MiB resource-backed stream. Each scenario
 measures opening, reading (enumerating children for the directory scenario),
-and rewriting. Each operation runs three times in fresh PHP processes with
+re-reading, and rewriting. The re-read scenario runs the read twice and times
+only the second pass, which runs in reverse order after the first pass has
+pushed every chain out of the bounded caches; it is the cost of the memory
+budget. Each operation runs three times in fresh PHP processes with
 `XDEBUG_MODE=off`; fixture generation runs separately and temporary files are
 removed afterward. If Xdebug is installed, version 3.1+ is required to inspect
 its active modes without producing diagnostic output. Older versions are rejected.

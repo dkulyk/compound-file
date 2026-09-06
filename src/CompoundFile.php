@@ -50,10 +50,14 @@ final class CompoundFile
     private array $miniStreamSectors = [];
     /** @var array<int, string> Bounded FIFO cache of mini-stream payload blocks. */
     private array $miniStreamBlocks = [];
+    private const CHAIN_CACHE_ENTRIES = 1024;
+    private const CHAIN_CACHE_SECTORS = 32768;
     /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
     private array $regularChainCache = [];
+    private int $regularChainCacheSectors = 0;
     /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
     private array $miniChainCache = [];
+    private int $miniChainCacheSectors = 0;
 
     private function __construct(RandomAccessReader $reader)
     {
@@ -77,10 +81,21 @@ final class CompoundFile
         return new self(RandomAccessReader::wrap($resource));
     }
 
-    /** Releases the parser's filesystem handle; caller-owned resources stay open. */
+    /**
+     * Releases the parser's filesystem handle and drops every cache.
+     *
+     * Directory entries reference the parser, so the object graph is only
+     * reclaimed by cycle collection. Clearing the caches here releases the
+     * bulk of the retained memory immediately.
+     */
     public function close(): void
     {
         $this->reader->close();
+        $this->regularChainCache = [];
+        $this->regularChainCacheSectors = 0;
+        $this->miniChainCache = [];
+        $this->miniChainCacheSectors = 0;
+        $this->miniStreamBlocks = [];
     }
 
     /** Returns the CFB major version (3 or 4). */
@@ -461,7 +476,14 @@ final class CompoundFile
         $first = intdiv($offset, $this->sectorSize);
         $inside = $offset % $this->sectorSize;
         $count = intdiv($inside + $length + $this->sectorSize - 1, $this->sectorSize);
-        $sectors = $this->chainRange($start, $this->fat, $this->regularChainCache, $first, $count);
+        $sectors = $this->chainRange(
+            $start,
+            $this->fat,
+            $this->regularChainCache,
+            $this->regularChainCacheSectors,
+            $first,
+            $count,
+        );
 
         return $this->readSectorRuns($sectors, $inside, $length);
     }
@@ -506,7 +528,7 @@ final class CompoundFile
         $first = intdiv($offset, $unitSize);
         $inside = $offset % $unitSize;
         $count = intdiv($inside + $length + $unitSize - 1, $unitSize);
-        $units = $this->chainRange($start, $table, $this->miniChainCache, $first, $count);
+        $units = $this->chainRange($start, $table, $this->miniChainCache, $this->miniChainCacheSectors, $first, $count);
 
         $result = '';
         $unitCount = count($units);
@@ -569,7 +591,7 @@ final class CompoundFile
      * @param array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> $cache
      * @return list<int>
      */
-    private function chainRange(int $start, array $table, array &$cache, int $first, int $count): array
+    private function chainRange(int $start, array $table, array &$cache, int &$cachedSectors, int $first, int $count): array
     {
         if (!isset($cache[$start])) {
             $cache[$start] = ['sectors' => [], 'seen' => [], 'complete' => false];
@@ -589,11 +611,36 @@ final class CompoundFile
             $this->validateChainUnit($current, $table, $seen);
             $seen[$current] = true;
             $sectors[] = $current;
+            $cachedSectors++;
             $tail = $current;
         }
         unset($entry, $sectors, $seen);
+        $this->evictChains($cache, $cachedSectors, $start);
 
         return array_slice($cache[$start]['sectors'], $first, $count);
+    }
+
+    /**
+     * Drops the least recently inserted chains until the cache fits both the
+     * entry and the sector budget.
+     *
+     * The chain currently being read is exempt, so one very long chain can
+     * still hold more sectors than the budget while it stays in use.
+     *
+     * @param array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> $cache
+     */
+    private function evictChains(array &$cache, int &$cachedSectors, int $active): void
+    {
+        foreach ($cache as $start => $entry) {
+            if (count($cache) <= self::CHAIN_CACHE_ENTRIES && $cachedSectors <= self::CHAIN_CACHE_SECTORS) {
+                return;
+            }
+            if ($start === $active) {
+                continue;
+            }
+            $cachedSectors -= count($entry['sectors']);
+            unset($cache[$start]);
+        }
     }
 
     /**
