@@ -132,12 +132,13 @@ final class CompoundFile
      */
     public function getChildren(string $storagePath = ''): array
     {
-        $storage = $this->findEntry($storagePath);
+        $key = $this->normalizePath($storagePath);
+        $storage = $this->entriesByPath[$key] ?? null;
         if ($storage === null || !$storage->isStorage()) {
             throw new CfbfException(sprintf('Storage "%s" does not exist.', $storagePath));
         }
 
-        return $this->childrenByPath[$this->normalizePath($storagePath)] ?? [];
+        return $this->childrenByPath[$key] ?? [];
     }
 
     /** Opens a named stream for incremental, seekable reading. */
