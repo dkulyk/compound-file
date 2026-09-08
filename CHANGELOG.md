@@ -12,6 +12,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   form a reference cycle back to the parser, so the handle previously stayed
   open until cyclic garbage collection ran. Caller-owned resources passed to
   `fromResource()` are still left open.
+- Reject a `DirectoryEntry` that belongs to a different parser. Passing a
+  foreign entry to `openStream()` or `getStreamContents()` previously applied
+  its sector metadata to the receiving file and silently returned bytes from
+  the wrong container. Misuse now raises `InvalidArgumentException`.
 
 ## [0.2.6] - 2026-09-07
 
