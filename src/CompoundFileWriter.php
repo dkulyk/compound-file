@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace DK\CompoundFile;
 
 use DK\CompoundFile\Exception\CfbfException;
+use DK\CompoundFile\Internal\CfbfNameComparator;
+use DK\CompoundFile\Internal\DirectoryTreeBuilder;
 use DK\CompoundFile\Internal\PathNormalizer;
 use DK\CompoundFile\Internal\RandomAccessReader;
 use DK\CompoundFile\Internal\WritableEntry;
@@ -23,7 +25,6 @@ final class CompoundFileWriter
     private const END = 0xFFFFFFFE;
     private const FAT = 0xFFFFFFFD;
     private const DIFAT = 0xFFFFFFFC;
-    private const NONE = 0xFFFFFFFF;
     private const MINI_CUTOFF = 4096;
     private const MINI_SECTOR_SIZE = 64;
     private const COPY_BLOCK_SIZE = 1_048_576;
@@ -357,7 +358,7 @@ final class CompoundFileWriter
             $fat[$sector] = self::FAT;
         }
 
-        $tree = $this->directoryTree($orderedEntries);
+        $tree = (new DirectoryTreeBuilder())->build($orderedEntries);
         $streamLocations = [];
         foreach ($miniStreams as $id => $stream) {
             $streamLocations[$id] = ['start' => $stream['start'], 'size' => $stream['entry']->getSize()];
@@ -449,184 +450,9 @@ final class CompoundFileWriter
         $entries = $this->entries;
         $root = $entries[''];
         unset($entries['']);
-        uasort($entries, fn (WritableEntry $left, WritableEntry $right): int => $this->compareNames($left->path, $right->path));
+        uasort($entries, static fn (WritableEntry $left, WritableEntry $right): int => CfbfNameComparator::compare($left->path, $right->path));
 
         return array_merge([$root], array_values($entries));
-    }
-
-    /**
-     * @param list<WritableEntry> $entries
-     * @return array<int, WritableTreeNode>
-     */
-    private function directoryTree(array $entries): array
-    {
-        $tree = [];
-        $idsByParent = [];
-        foreach ($entries as $id => $entry) {
-            $tree[$id] = new WritableTreeNode();
-            if ($id === 0) {
-                continue;
-            }
-            $parent = $this->parentPath($entry->path);
-            $idsByParent[$this->normalizePath($parent)][] = $id;
-        }
-        $idByPath = [];
-        foreach ($entries as $id => $entry) {
-            $idByPath[$this->normalizePath($entry->path)] = $id;
-        }
-        foreach ($idsByParent as $parent => $ids) {
-            if (!isset($idByPath[$parent])) {
-                throw new CfbfException(sprintf('Parent storage "%s" is missing.', $parent));
-            }
-            $parentId = $idByPath[$parent];
-            if (!$entries[$parentId]->isStorage()) {
-                throw new CfbfException(sprintf('Entry "%s" cannot contain children.', $entries[$parentId]->path));
-            }
-            $tree[$parentId]->child = $this->buildRedBlackTree($ids, $entries, $tree);
-        }
-
-        return $tree;
-    }
-
-    /**
-     * @param list<int> $ids
-     * @param list<WritableEntry> $entries
-     * @param array<int, WritableTreeNode> $tree
-     */
-    private function buildRedBlackTree(array $ids, array $entries, array &$tree): int
-    {
-        usort($ids, fn (int $left, int $right): int => $this->compareEntryNames($entries[$left], $entries[$right]));
-        for ($index = 1, $count = count($ids); $index < $count; $index++) {
-            if ($this->compareEntryNames($entries[$ids[$index - 1]], $entries[$ids[$index]]) === 0) {
-                throw new CfbfException(sprintf(
-                    'Sibling entries "%s" and "%s" have equivalent CFBF names.',
-                    $entries[$ids[$index - 1]]->name,
-                    $entries[$ids[$index]]->name,
-                ));
-            }
-        }
-        $root = self::NONE;
-        foreach ($ids as $id) {
-            $tree[$id]->left = self::NONE;
-            $tree[$id]->right = self::NONE;
-            $tree[$id]->parent = self::NONE;
-            $tree[$id]->color = DirectoryEntry::COLOR_RED;
-            $previous = self::NONE;
-            $current = $root;
-            while ($current !== self::NONE) {
-                $previous = $current;
-                $current = $this->compareEntryNames($entries[$id], $entries[$current]) < 0
-                    ? $tree[$current]->left
-                    : $tree[$current]->right;
-            }
-            $tree[$id]->parent = $previous;
-            if ($previous === self::NONE) {
-                $root = $id;
-            } elseif ($this->compareEntryNames($entries[$id], $entries[$previous]) < 0) {
-                $tree[$previous]->left = $id;
-            } else {
-                $tree[$previous]->right = $id;
-            }
-            $this->fixRedBlackInsertion($id, $root, $tree);
-        }
-        if ($root !== self::NONE) {
-            $tree[$root]->color = DirectoryEntry::COLOR_BLACK;
-        }
-
-        return $root;
-    }
-
-    /**
-     * @param array<int, WritableTreeNode> $tree
-     */
-    private function fixRedBlackInsertion(int $node, int &$root, array &$tree): void
-    {
-        while (
-            $node !== $root
-            && $tree[$node]->parent !== self::NONE
-            && $tree[$tree[$node]->parent]->color === DirectoryEntry::COLOR_RED
-        ) {
-            $parentId = $tree[$node]->parent;
-            $grandparent = $tree[$parentId]->parent;
-            if ($parentId === $tree[$grandparent]->left) {
-                $uncle = $tree[$grandparent]->right;
-                if ($uncle !== self::NONE && $tree[$uncle]->color === DirectoryEntry::COLOR_RED) {
-                    $tree[$parentId]->color = DirectoryEntry::COLOR_BLACK;
-                    $tree[$uncle]->color = DirectoryEntry::COLOR_BLACK;
-                    $tree[$grandparent]->color = DirectoryEntry::COLOR_RED;
-                    $node = $grandparent;
-                    continue;
-                }
-                if ($node === $tree[$parentId]->right) {
-                    $node = $parentId;
-                    $this->rotateLeft($node, $root, $tree);
-                    $parentId = $tree[$node]->parent;
-                    $grandparent = $tree[$parentId]->parent;
-                }
-                $tree[$parentId]->color = DirectoryEntry::COLOR_BLACK;
-                $tree[$grandparent]->color = DirectoryEntry::COLOR_RED;
-                $this->rotateRight($grandparent, $root, $tree);
-            } else {
-                $uncle = $tree[$grandparent]->left;
-                if ($uncle !== self::NONE && $tree[$uncle]->color === DirectoryEntry::COLOR_RED) {
-                    $tree[$parentId]->color = DirectoryEntry::COLOR_BLACK;
-                    $tree[$uncle]->color = DirectoryEntry::COLOR_BLACK;
-                    $tree[$grandparent]->color = DirectoryEntry::COLOR_RED;
-                    $node = $grandparent;
-                    continue;
-                }
-                if ($node === $tree[$parentId]->left) {
-                    $node = $parentId;
-                    $this->rotateRight($node, $root, $tree);
-                    $parentId = $tree[$node]->parent;
-                    $grandparent = $tree[$parentId]->parent;
-                }
-                $tree[$parentId]->color = DirectoryEntry::COLOR_BLACK;
-                $tree[$grandparent]->color = DirectoryEntry::COLOR_RED;
-                $this->rotateLeft($grandparent, $root, $tree);
-            }
-        }
-        $tree[$root]->color = DirectoryEntry::COLOR_BLACK;
-    }
-
-    /** @param array<int, WritableTreeNode> $tree */
-    private function rotateLeft(int $node, int &$root, array &$tree): void
-    {
-        $right = $tree[$node]->right;
-        $tree[$node]->right = $tree[$right]->left;
-        if ($tree[$right]->left !== self::NONE) {
-            $tree[$tree[$right]->left]->parent = $node;
-        }
-        $tree[$right]->parent = $tree[$node]->parent;
-        if ($tree[$node]->parent === self::NONE) {
-            $root = $right;
-        } elseif ($node === $tree[$tree[$node]->parent]->left) {
-            $tree[$tree[$node]->parent]->left = $right;
-        } else {
-            $tree[$tree[$node]->parent]->right = $right;
-        }
-        $tree[$right]->left = $node;
-        $tree[$node]->parent = $right;
-    }
-
-    /** @param array<int, WritableTreeNode> $tree */
-    private function rotateRight(int $node, int &$root, array &$tree): void
-    {
-        $left = $tree[$node]->left;
-        $tree[$node]->left = $tree[$left]->right;
-        if ($tree[$left]->right !== self::NONE) {
-            $tree[$tree[$left]->right]->parent = $node;
-        }
-        $tree[$left]->parent = $tree[$node]->parent;
-        if ($tree[$node]->parent === self::NONE) {
-            $root = $left;
-        } elseif ($node === $tree[$tree[$node]->parent]->right) {
-            $tree[$tree[$node]->parent]->right = $left;
-        } else {
-            $tree[$tree[$node]->parent]->left = $left;
-        }
-        $tree[$left]->right = $node;
-        $tree[$node]->parent = $left;
     }
 
     /** @return array{int, int} */
@@ -734,22 +560,6 @@ final class CompoundFileWriter
         return $this->u32($ticks % 4294967296).$this->u32(intdiv($ticks, 4294967296));
     }
 
-    private function compareEntryNames(WritableEntry $left, WritableEntry $right): int
-    {
-        return $this->compareNames($left->name, $right->name);
-    }
-
-    private function compareNames(string $left, string $right): int
-    {
-        $leftUpper = PathNormalizer::fold($left);
-        $rightUpper = PathNormalizer::fold($right);
-        $leftUtf16 = mb_convert_encoding($leftUpper, 'UTF-16BE', 'UTF-8');
-        $rightUtf16 = mb_convert_encoding($rightUpper, 'UTF-16BE', 'UTF-8');
-        $length = strlen($leftUtf16) <=> strlen($rightUtf16);
-
-        return $length !== 0 ? $length : strcmp($leftUtf16, $rightUtf16);
-    }
-
     /** @return list<string> */
     private function pathParts(string $path): array
     {
@@ -843,13 +653,6 @@ final class CompoundFileWriter
             $this->entries[$this->normalizePath($entry->getPath())] = WritableEntry::imported($file, $entry);
         }
         $this->ownedSource = $file;
-    }
-
-    private function parentPath(string $path): string
-    {
-        $position = strrpos($path, '/');
-
-        return $position === false ? '' : substr($path, 0, $position);
     }
 
     private function normalizePath(string $path): string
