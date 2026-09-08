@@ -19,6 +19,36 @@ final class ValidationTest extends TestCase
     private const HEADER_MINI_STREAM_CUTOFF = 56;
     private const DIRECTORY_SECOND_ENTRY = 512 + 128;
 
+    /** @return iterable<string, array{string, bool, bool}> */
+    public static function reservedDirectoryNames(): iterable
+    {
+        foreach (['/' => 'slash', '\\' => 'backslash', ':' => 'colon', '!' => 'exclamation'] as $character => $label) {
+            foreach ([true, false] as $little) {
+                foreach ([false, true] as $streamParent) {
+                    yield $label.'-'.($little ? 'le' : 'be').'-'.($streamParent ? 'stream-parent' : 'missing-parent')
+                        => ['A'.$character.'B', $little, $streamParent];
+                }
+            }
+        }
+    }
+
+    #[DataProvider('reservedDirectoryNames')]
+    public function testRejectsReservedNamesBeforeWriterImport(string $name, bool $little, bool $streamParent): void
+    {
+        $bytes = FixtureBuilder::regular($name, $little);
+        if ($streamParent) {
+            // Add a root sibling stream A: interpreting A/B as a path would
+            // otherwise attach the imported entry beneath a stream on save.
+            $entry = substr(FixtureBuilder::regular('A', $little), self::DIRECTORY_SECOND_ENTRY, 128);
+            $bytes = substr_replace($bytes, $entry, self::DIRECTORY_SECOND_ENTRY + 128, 128);
+            $bytes = substr_replace($bytes, pack($little ? 'V' : 'N', 2), self::DIRECTORY_SECOND_ENTRY + 68, 4);
+        }
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('contains a reserved character');
+        CompoundFileWriter::fromCompoundFile($this->parse($bytes));
+    }
+
     #[RunInSeparateProcess]
     public function testParseFailureImmediatelyClosesOwnedFileHandle(): void
     {

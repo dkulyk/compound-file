@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace DK\CompoundFile\Internal;
 
 use DK\CompoundFile\DirectoryEntry;
+use DK\CompoundFile\Exception\CfbfException;
 
 /** @internal Builds the red-black sibling trees serialized in a CFBF directory. */
 final class DirectoryTreeBuilder
@@ -12,7 +13,7 @@ final class DirectoryTreeBuilder
     private const NONE = 0xFFFFFFFF;
 
     /**
-     * @param list<WritableEntry> $entries Root-first entries with existing storage parents and unique normalized paths.
+     * @param list<WritableEntry> $entries
      * @return array<int, WritableTreeNode>
      */
     public function build(array $entries): array
@@ -31,7 +32,13 @@ final class DirectoryTreeBuilder
             $idByPath[PathNormalizer::normalize($entry->path)] = $id;
         }
         foreach ($idsByParent as $parent => $ids) {
+            if (!isset($idByPath[$parent])) {
+                throw new CfbfException(sprintf('Parent storage "%s" is missing.', $parent));
+            }
             $parentId = $idByPath[$parent];
+            if (!$entries[$parentId]->isStorage()) {
+                throw new CfbfException(sprintf('Entry "%s" cannot contain children.', $entries[$parentId]->path));
+            }
             $tree[$parentId]->child = $this->buildSiblingTree($ids, $entries, $tree);
         }
 
@@ -46,6 +53,15 @@ final class DirectoryTreeBuilder
     private function buildSiblingTree(array $ids, array $entries, array &$tree): int
     {
         usort($ids, static fn (int $left, int $right): int => self::compareEntries($entries[$left], $entries[$right]));
+        for ($index = 1, $count = count($ids); $index < $count; $index++) {
+            if (self::compareEntries($entries[$ids[$index - 1]], $entries[$ids[$index]]) === 0) {
+                throw new CfbfException(sprintf(
+                    'Sibling entries "%s" and "%s" have equivalent CFBF names.',
+                    $entries[$ids[$index - 1]]->name,
+                    $entries[$ids[$index]]->name,
+                ));
+            }
+        }
 
         $root = self::NONE;
         foreach ($ids as $id) {

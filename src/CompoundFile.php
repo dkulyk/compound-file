@@ -404,6 +404,9 @@ final class CompoundFile
                 'UTF-8',
                 $this->littleEndian ? 'UTF-16LE' : 'UTF-16BE'
             );
+            if (strpbrk($name, '/\\:!') !== false) {
+                throw new CfbfException(sprintf('Directory entry name "%s" contains a reserved character.', $name));
+            }
             $low = $fields['sizeLow'];
             $high = $fields['sizeHigh'];
             $size = $this->majorVersion === 3 ? $low : $this->combine64($low, $high);
