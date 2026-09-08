@@ -170,7 +170,12 @@ final class CompoundFile
     /** Opens a named stream for incremental, seekable reading. */
     public function openStream(string|DirectoryEntry $path): Stream
     {
-        $entry = $path instanceof DirectoryEntry ? $path : $this->findEntry($path);
+        if ($path instanceof DirectoryEntry) {
+            $this->assertOwnEntry($path);
+            $entry = $path;
+        } else {
+            $entry = $this->findEntry($path);
+        }
         if ($entry === null || !$entry->isStream()) {
             $description = $path instanceof DirectoryEntry ? $path->getPath() : $path;
             throw new CfbfException(sprintf('Stream "%s" does not exist.', $description));
@@ -187,6 +192,7 @@ final class CompoundFile
     /** @internal Reads a byte range from a directory stream. */
     public function readEntry(DirectoryEntry $entry, int $offset, int $length): string
     {
+        $this->assertOwnEntry($entry);
         $size = $entry->getSize();
         if ($offset < 0 || $offset > $size) {
             throw new \InvalidArgumentException('Stream offset is outside the stream.');
@@ -780,5 +786,12 @@ final class CompoundFile
     private function normalizePath(string $path): string
     {
         return PathNormalizer::normalize($path);
+    }
+
+    private function assertOwnEntry(DirectoryEntry $entry): void
+    {
+        if (($this->entries[$entry->getId()] ?? null) !== $entry) {
+            throw new \InvalidArgumentException('Directory entry belongs to a different compound file.');
+        }
     }
 }
