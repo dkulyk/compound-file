@@ -16,6 +16,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   foreign entry to `openStream()` or `getStreamContents()` previously applied
   its sector metadata to the receiving file and silently returned bytes from
   the wrong container. Misuse now raises `InvalidArgumentException`.
+- Reject directory entry names containing the reserved characters `/`, `\`,
+  `:` and `!`. Such names fabricated a hierarchy that no directory entry
+  described, which raised a confusing writer error on import or, for a name
+  whose fabricated parent was a stream, silently dropped the entry. Files the
+  reader previously accepted are now rejected.
 
 ## [0.2.6] - 2026-09-07
 
