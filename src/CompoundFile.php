@@ -62,7 +62,12 @@ final class CompoundFile
     private function __construct(RandomAccessReader $reader)
     {
         $this->reader = $reader;
-        $this->parse();
+        try {
+            $this->parse();
+        } catch (\Throwable $exception) {
+            $this->close();
+            throw $exception;
+        }
     }
 
     /** Opens and parses a compound file from a filesystem path. */

@@ -6,6 +6,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Close the owned file handle immediately when parsing fails. Directory entries
+  form a reference cycle back to the parser, so the handle previously stayed
+  open until cyclic garbage collection ran. Caller-owned resources passed to
+  `fromResource()` are still left open.
+
 ## [0.2.6] - 2026-09-07
 
 ### Added
