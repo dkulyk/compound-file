@@ -102,6 +102,32 @@ final class CompoundFileTest extends TestCase
             $bigEndian->getStreamContents('Equivalent')
         );
     }
+
+    public function testRejectsDirectoryEntryFromAnotherCompoundFile(): void
+    {
+        $first = $this->parse(FixtureBuilder::regularWithPayload(str_repeat('A', 4096)));
+        $second = $this->parse(FixtureBuilder::regularWithPayload(str_repeat('B', 4096)));
+        $foreignEntry = $second->findEntry('Data');
+        self::assertNotNull($foreignEntry);
+
+        try {
+            foreach (['openStream', 'getStreamContents'] as $method) {
+                try {
+                    $first->{$method}($foreignEntry);
+                    self::fail($method.' must reject an entry from another parser.');
+                } catch (\InvalidArgumentException $exception) {
+                    self::assertStringContainsString('different compound file', $exception->getMessage());
+                }
+            }
+
+            $this->expectException(\InvalidArgumentException::class);
+            $this->expectExceptionMessage('different compound file');
+            $first->readEntry($foreignEntry, 0, 4);
+        } finally {
+            $first->close();
+            $second->close();
+        }
+    }
     public function testRejectsInvalidSignature(): void
     {
         $resource = fopen('php://temp', 'w+b');
