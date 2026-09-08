@@ -8,6 +8,7 @@ use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\Exception\CfbfException;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 
 final class ValidationTest extends TestCase
@@ -17,6 +18,39 @@ final class ValidationTest extends TestCase
     private const HEADER_MINI_SECTOR_SHIFT = 32;
     private const HEADER_MINI_STREAM_CUTOFF = 56;
     private const DIRECTORY_SECOND_ENTRY = 512 + 128;
+
+    #[RunInSeparateProcess]
+    public function testParseFailureImmediatelyClosesOwnedFileHandle(): void
+    {
+        $file = tempnam(sys_get_temp_dir(), 'ole-invalid-');
+        self::assertIsString($file);
+        // Invalid root child is detected after directory entries have created
+        // a reference cycle back to the partially constructed parser.
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('V', 123), 512 + 76, 4);
+        file_put_contents($file, $bytes);
+        gc_collect_cycles();
+        $gcEnabled = gc_enabled();
+        gc_disable();
+        $baseline = count(get_resources('stream'));
+
+        try {
+            for ($iteration = 0; $iteration < 100; $iteration++) {
+                try {
+                    CompoundFile::open($file);
+                    self::fail('The malformed directory tree must be rejected.');
+                } catch (CfbfException $exception) {
+                    self::assertStringContainsString('missing entry', $exception->getMessage());
+                }
+                self::assertCount($baseline, get_resources('stream'));
+            }
+        } finally {
+            if ($gcEnabled) {
+                gc_enable();
+            }
+            gc_collect_cycles();
+            unlink($file);
+        }
+    }
 
     public function testRejectsTruncatedFile(): void
     {
