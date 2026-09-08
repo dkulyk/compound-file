@@ -4,16 +4,9 @@ declare(strict_types=1);
 
 namespace DK\CompoundFile\Internal;
 
-use DK\CompoundFile\Exception\CfbfException;
-
 /** @internal Resolves and bounds cached CFBF sector chains. */
 final class SectorChainCache
 {
-    private const FREE = 0xFFFFFFFF;
-    private const END = 0xFFFFFFFE;
-    private const FAT = 0xFFFFFFFD;
-    private const DIFAT = 0xFFFFFFFC;
-
     /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
     private array $entries = [];
     private int $sectorCount = 0;
@@ -40,12 +33,12 @@ final class SectorChainCache
         $seen = &$entry['seen'];
         $tail = $sectors === [] ? null : $sectors[array_key_last($sectors)];
         while (count($sectors) < $last && !$entry['complete']) {
-            $current = $tail === null ? $start : $table[$tail] ?? self::FREE;
-            if ($current === self::END) {
+            $current = $tail === null ? $start : $table[$tail] ?? SectorChain::FREE;
+            if ($current === SectorChain::END) {
                 $entry['complete'] = true;
                 break;
             }
-            $this->validateUnit($current, $table, $seen);
+            SectorChain::validateUnit($current, $table, $seen);
             $seen[$current] = true;
             $sectors[] = $current;
             $this->sectorCount++;
@@ -77,17 +70,4 @@ final class SectorChainCache
         }
     }
 
-    /**
-     * @param array<int, int> $table
-     * @param array<int, true> $seen
-     */
-    private function validateUnit(int $current, array $table, array $seen): void
-    {
-        if ($current === self::FREE || $current === self::FAT || $current === self::DIFAT || !isset($table[$current])) {
-            throw new CfbfException('Invalid sector chain.');
-        }
-        if (isset($seen[$current])) {
-            throw new CfbfException('Cycle in sector chain.');
-        }
-    }
 }

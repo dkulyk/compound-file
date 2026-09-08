@@ -7,6 +7,7 @@ namespace DK\CompoundFile;
 use DK\CompoundFile\Exception\CfbfException;
 use DK\CompoundFile\Internal\PathNormalizer;
 use DK\CompoundFile\Internal\RandomAccessReader;
+use DK\CompoundFile\Internal\SectorChain;
 use DK\CompoundFile\Internal\SectorChainCache;
 
 /**
@@ -18,10 +19,6 @@ use DK\CompoundFile\Internal\SectorChainCache;
  */
 final class CompoundFile
 {
-    private const FREE = 0xFFFFFFFF;
-    private const END = 0xFFFFFFFE;
-    private const FAT = 0xFFFFFFFD;
-    private const DIFAT = 0xFFFFFFFC;
     private const NONE = 0xFFFFFFFF;
 
     private RandomAccessReader $reader;
@@ -285,12 +282,12 @@ final class CompoundFile
 
         $fatSectors = [];
         foreach ($this->uint32Array(substr($header, 76, 109 * 4)) as $id) {
-            if ($id !== self::FREE) {
+            if ($id !== SectorChain::FREE) {
                 $fatSectors[] = $id;
             }
         }
         $visited = [];
-        for ($n = 0; $n < $difatCount && $difatStart !== self::END; $n++) {
+        for ($n = 0; $n < $difatCount && $difatStart !== SectorChain::END; $n++) {
             if (isset($visited[$difatStart])) {
                 throw new CfbfException('Cycle in DIFAT chain.');
             }
@@ -299,11 +296,11 @@ final class CompoundFile
             $difatEntries = $this->uint32Array($sector);
             $nextDifat = array_pop($difatEntries);
             foreach ($difatEntries as $id) {
-                if ($id !== self::FREE) {
+                if ($id !== SectorChain::FREE) {
                     $fatSectors[] = $id;
                 }
             }
-            $difatStart = $nextDifat ?? self::END;
+            $difatStart = $nextDifat ?? SectorChain::END;
         }
         if (count($fatSectors) < $fatCount) {
             throw new CfbfException('DIFAT contains fewer FAT sectors than declared.');
@@ -593,28 +590,14 @@ final class CompoundFile
         $seen = [];
         $sectors = [];
         $current = $start;
-        while ($current !== self::END) {
-            $this->validateChainUnit($current, $table, $seen);
+        while ($current !== SectorChain::END) {
+            SectorChain::validateUnit($current, $table, $seen);
             $seen[$current] = true;
             $sectors[] = $current;
             $current = $table[$current];
         }
 
         return $sectors;
-    }
-
-    /**
-     * @param array<int, int> $table
-     * @param array<int, true> $seen
-     */
-    private function validateChainUnit(int $current, array $table, array $seen): void
-    {
-        if ($current === self::FREE || $current === self::FAT || $current === self::DIFAT || !isset($table[$current])) {
-            throw new CfbfException('Invalid sector chain.');
-        }
-        if (isset($seen[$current])) {
-            throw new CfbfException('Cycle in sector chain.');
-        }
     }
 
     private function sector(int $id): string
