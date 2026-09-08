@@ -6,6 +6,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-09-09
+
 ### Fixed
 
 - Close the owned file handle immediately when parsing fails. Directory entries
@@ -188,7 +190,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Initial CFBF reader with FAT, DIFAT, mini-FAT, endian-aware parsing, Unicode
   names, resource input, and the read-only `ole2://` stream wrapper.
 
-[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/dkulyk/compound-file/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/dkulyk/compound-file/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/dkulyk/compound-file/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/dkulyk/compound-file/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/dkulyk/compound-file/compare/v0.2.3...v0.2.4
