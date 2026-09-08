@@ -7,6 +7,8 @@ namespace DK\CompoundFile;
 use DK\CompoundFile\Exception\CfbfException;
 use DK\CompoundFile\Internal\PathNormalizer;
 use DK\CompoundFile\Internal\RandomAccessReader;
+use DK\CompoundFile\Internal\SectorChain;
+use DK\CompoundFile\Internal\SectorChainCache;
 
 /**
  * Read-only parser for an OLE2 Compound File Binary Format (CFBF) container.
@@ -17,10 +19,6 @@ use DK\CompoundFile\Internal\RandomAccessReader;
  */
 final class CompoundFile
 {
-    private const FREE = 0xFFFFFFFF;
-    private const END = 0xFFFFFFFE;
-    private const FAT = 0xFFFFFFFD;
-    private const DIFAT = 0xFFFFFFFC;
     private const NONE = 0xFFFFFFFF;
 
     private RandomAccessReader $reader;
@@ -52,16 +50,14 @@ final class CompoundFile
     private array $miniStreamBlocks = [];
     private const CHAIN_CACHE_ENTRIES = 1024;
     private const CHAIN_CACHE_SECTORS = 32768;
-    /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
-    private array $regularChainCache = [];
-    private int $regularChainCacheSectors = 0;
-    /** @var array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> */
-    private array $miniChainCache = [];
-    private int $miniChainCacheSectors = 0;
+    private SectorChainCache $regularChainCache;
+    private SectorChainCache $miniChainCache;
 
     private function __construct(RandomAccessReader $reader)
     {
         $this->reader = $reader;
+        $this->regularChainCache = new SectorChainCache(self::CHAIN_CACHE_ENTRIES, self::CHAIN_CACHE_SECTORS);
+        $this->miniChainCache = new SectorChainCache(self::CHAIN_CACHE_ENTRIES, self::CHAIN_CACHE_SECTORS);
         try {
             $this->parse();
         } catch (\Throwable $exception) {
@@ -96,10 +92,8 @@ final class CompoundFile
     public function close(): void
     {
         $this->reader->close();
-        $this->regularChainCache = [];
-        $this->regularChainCacheSectors = 0;
-        $this->miniChainCache = [];
-        $this->miniChainCacheSectors = 0;
+        $this->regularChainCache->clear();
+        $this->miniChainCache->clear();
         $this->miniStreamBlocks = [];
     }
 
@@ -288,12 +282,12 @@ final class CompoundFile
 
         $fatSectors = [];
         foreach ($this->uint32Array(substr($header, 76, 109 * 4)) as $id) {
-            if ($id !== self::FREE) {
+            if ($id !== SectorChain::FREE) {
                 $fatSectors[] = $id;
             }
         }
         $visited = [];
-        for ($n = 0; $n < $difatCount && $difatStart !== self::END; $n++) {
+        for ($n = 0; $n < $difatCount && $difatStart !== SectorChain::END; $n++) {
             if (isset($visited[$difatStart])) {
                 throw new CfbfException('Cycle in DIFAT chain.');
             }
@@ -302,11 +296,11 @@ final class CompoundFile
             $difatEntries = $this->uint32Array($sector);
             $nextDifat = array_pop($difatEntries);
             foreach ($difatEntries as $id) {
-                if ($id !== self::FREE) {
+                if ($id !== SectorChain::FREE) {
                     $fatSectors[] = $id;
                 }
             }
-            $difatStart = $nextDifat ?? self::END;
+            $difatStart = $nextDifat ?? SectorChain::END;
         }
         if (count($fatSectors) < $fatCount) {
             throw new CfbfException('DIFAT contains fewer FAT sectors than declared.');
@@ -487,14 +481,7 @@ final class CompoundFile
         $first = intdiv($offset, $this->sectorSize);
         $inside = $offset % $this->sectorSize;
         $count = intdiv($inside + $length + $this->sectorSize - 1, $this->sectorSize);
-        $sectors = $this->chainRange(
-            $start,
-            $this->fat,
-            $this->regularChainCache,
-            $this->regularChainCacheSectors,
-            $first,
-            $count,
-        );
+        $sectors = $this->regularChainCache->range($start, $this->fat, $first, $count);
 
         return $this->readSectorRuns($sectors, $inside, $length);
     }
@@ -539,7 +526,7 @@ final class CompoundFile
         $first = intdiv($offset, $unitSize);
         $inside = $offset % $unitSize;
         $count = intdiv($inside + $length + $unitSize - 1, $unitSize);
-        $units = $this->chainRange($start, $table, $this->miniChainCache, $this->miniChainCacheSectors, $first, $count);
+        $units = $this->miniChainCache->range($start, $table, $first, $count);
 
         $result = '';
         $unitCount = count($units);
@@ -595,66 +582,6 @@ final class CompoundFile
     }
 
     /**
-     * Resolves only the requested part of a chain and retains the index for
-     * subsequent sequential or random reads.
-     *
-     * @param array<int, int> $table
-     * @param array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> $cache
-     * @return list<int>
-     */
-    private function chainRange(int $start, array $table, array &$cache, int &$cachedSectors, int $first, int $count): array
-    {
-        if (!isset($cache[$start])) {
-            $cache[$start] = ['sectors' => [], 'seen' => [], 'complete' => false];
-        }
-
-        $last = $first + $count;
-        $entry = &$cache[$start];
-        $sectors = &$entry['sectors'];
-        $seen = &$entry['seen'];
-        $tail = $sectors === [] ? null : $sectors[array_key_last($sectors)];
-        while (count($sectors) < $last && !$entry['complete']) {
-            $current = $tail === null ? $start : $table[$tail] ?? self::FREE;
-            if ($current === self::END) {
-                $entry['complete'] = true;
-                break;
-            }
-            $this->validateChainUnit($current, $table, $seen);
-            $seen[$current] = true;
-            $sectors[] = $current;
-            $cachedSectors++;
-            $tail = $current;
-        }
-        unset($entry, $sectors, $seen);
-        $this->evictChains($cache, $cachedSectors, $start);
-
-        return array_slice($cache[$start]['sectors'], $first, $count);
-    }
-
-    /**
-     * Drops the least recently inserted chains until the cache fits both the
-     * entry and the sector budget.
-     *
-     * The chain currently being read is exempt, so one very long chain can
-     * still hold more sectors than the budget while it stays in use.
-     *
-     * @param array<int, array{sectors: list<int>, seen: array<int, true>, complete: bool}> $cache
-     */
-    private function evictChains(array &$cache, int &$cachedSectors, int $active): void
-    {
-        foreach ($cache as $start => $entry) {
-            if (count($cache) <= self::CHAIN_CACHE_ENTRIES && $cachedSectors <= self::CHAIN_CACHE_SECTORS) {
-                return;
-            }
-            if ($start === $active) {
-                continue;
-            }
-            $cachedSectors -= count($entry['sectors']);
-            unset($cache[$start]);
-        }
-    }
-
-    /**
      * @param array<int, int> $table
      * @return list<int>
      */
@@ -663,28 +590,14 @@ final class CompoundFile
         $seen = [];
         $sectors = [];
         $current = $start;
-        while ($current !== self::END) {
-            $this->validateChainUnit($current, $table, $seen);
+        while ($current !== SectorChain::END) {
+            SectorChain::validateUnit($current, $table, $seen);
             $seen[$current] = true;
             $sectors[] = $current;
             $current = $table[$current];
         }
 
         return $sectors;
-    }
-
-    /**
-     * @param array<int, int> $table
-     * @param array<int, true> $seen
-     */
-    private function validateChainUnit(int $current, array $table, array $seen): void
-    {
-        if ($current === self::FREE || $current === self::FAT || $current === self::DIFAT || !isset($table[$current])) {
-            throw new CfbfException('Invalid sector chain.');
-        }
-        if (isset($seen[$current])) {
-            throw new CfbfException('Cycle in sector chain.');
-        }
     }
 
     private function sector(int $id): string
