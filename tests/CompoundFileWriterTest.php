@@ -200,6 +200,16 @@ final class CompoundFileWriterTest extends TestCase
         $file = $this->roundTrip($writer);
         self::assertTrue($file->getHeader()->hasDifatSectors());
         self::assertGreaterThan(109, $file->getHeader()->getFatSectorCount());
+        // The reader does not check these markers, so assert them in the FAT itself.
+        $tables = $file->getAllocationTable();
+        $fat = $tables->getFat();
+        $start = $file->getHeader()->getDifatStartSector();
+        foreach (range($start, $start + $file->getHeader()->getDifatSectorCount() - 1) as $sector) {
+            self::assertSame(0xFFFFFFFC, $fat[$sector]);
+        }
+        foreach ($tables->getDifat() as $sector) {
+            self::assertSame(0xFFFFFFFD, $fat[$sector]);
+        }
         self::assertSame(strlen($contents), $file->findEntry('Large')?->getSize());
         self::assertSame(hash('sha256', $contents), hash('sha256', $file->getStreamContents('Large')));
     }

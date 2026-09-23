@@ -25,6 +25,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   them. Reading a 160 MiB stream now peaks at 11.3 MiB instead of 18.0 MiB,
   and opening a 64 MiB file at 8.0 MiB instead of 12.0 MiB. Open and read
   times are unchanged.
+- The writer builds the FAT and mini-FAT directly as bytes instead of filling
+  an array entry by entry and packing it. Saving a 160 MiB file peaks 3.7 MiB
+  above its input instead of 16.0 MiB, and building the FAT for it takes
+  about 1.4 ms instead of 5.6 ms. Output is byte-for-byte unchanged.
 
 ## [0.3.0] - 2026-09-23
 
