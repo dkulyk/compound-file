@@ -590,12 +590,11 @@ final class CompoundFile
      */
     private function chain(int $start, array $table): array
     {
-        $seen = [];
         $sectors = [];
+        $hare = $start;
         $current = $start;
         while ($current !== SectorChain::END) {
-            SectorChain::validateUnit($current, $table, $seen);
-            $seen[$current] = true;
+            SectorChain::visit($current, $hare, $table, $sectors === []);
             $sectors[] = $current;
             $current = $table[$current];
         }

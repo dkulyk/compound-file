@@ -6,6 +6,17 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Sector chains are checked for cycles with Floyd's algorithm instead of a set
+  of every visited sector. The set held one entry per sector of the stream
+  being read, so memory grew with the stream: reading a single 160 MiB stream
+  now peaks at 20 MiB instead of 46 MiB, at the same speed. A looping chain
+  still fails with "Cycle in sector chain." before any repeated sector is
+  returned, but the error can now arrive up to one cycle length earlier: when
+  the loop does not go back to the stream's first sector, a read that stops
+  just short of the repeat fails as well.
+
 ## [0.3.0] - 2026-09-23
 
 ### Added
