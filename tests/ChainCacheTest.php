@@ -6,6 +6,9 @@ namespace DK\CompoundFile\Tests;
 
 use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
+use DK\CompoundFile\Exception\CfbfException;
+use DK\CompoundFile\Internal\SectorChain;
+use DK\CompoundFile\Internal\SectorChainCache;
 use PHPUnit\Framework\TestCase;
 
 final class ChainCacheTest extends TestCase
@@ -55,6 +58,34 @@ final class ChainCacheTest extends TestCase
             $file->close();
             fclose($resource);
         }
+    }
+
+    public function testSectorBoundEvictsOlderChains(): void
+    {
+        // A cached chain ignores the table it is given, so reading it through a
+        // changed table shows whether it was evicted and walked again.
+        $end = SectorChain::END;
+        $table = [1, 2, $end, 4, 5, $end, $end, 8, SectorChain::FREE, $end];
+        $moved = [6] + $table;
+        $cache = new SectorChainCache(10, 4);
+
+        // Chain 7 caches one sector, then fails on the broken link after it. The
+        // failure must release that sector from the count.
+        self::assertSame([7], $cache->range(7, $table, 0, 1));
+        try {
+            $cache->range(7, $table, 0, 3);
+            self::fail('A broken chain must be rejected.');
+        } catch (CfbfException) {
+        }
+        self::assertSame([0, 1, 2], $cache->range(0, $table, 0, 3));
+        self::assertSame([9], $cache->range(9, $table, 0, 1));
+        self::assertSame([0, 1, 2], $cache->range(0, $moved, 0, 3), 'Four sectors fit the bound.');
+
+        // Chain 3 brings the count to seven and evicts chain 0. Walking chain 0 again
+        // brings it to six, which evicts chains 9 and 3 in turn.
+        self::assertSame([3, 4, 5], $cache->range(3, $table, 0, 3));
+        self::assertSame([0, 6], $cache->range(0, $moved, 0, 3));
+        self::assertSame([5], $cache->range(3, [3 => 5] + $table, 1, 2));
     }
 
     public function testCloseReleasesCachedChains(): void

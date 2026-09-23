@@ -16,6 +16,11 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   returned, but the error can now arrive up to one cycle length earlier: when
   the loop does not go back to the stream's first sector, a read that stops
   just short of the repeat fails as well.
+- Cached sector chains are stored as packed 32-bit values, 4 bytes per sector
+  instead of about 16. After reading a 160 MiB stream in 64 KiB chunks, the
+  open file holds 10.0 MiB instead of 16.8 MiB. Reading and rewriting a
+  64 MiB stream peaks at 12.0 and 14.3 MiB instead of 14.0 and 18.3 MiB, at
+  the same speed.
 
 ## [0.3.0] - 2026-09-23
 
