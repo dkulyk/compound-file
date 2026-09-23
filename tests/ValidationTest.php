@@ -97,6 +97,7 @@ final class ValidationTest extends TestCase
         $bytes = substr_replace($bytes, pack('V', 0), 1024, 4);
 
         $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Cycle in sector chain.');
         $this->parse($bytes);
     }
 
@@ -144,7 +145,50 @@ final class ValidationTest extends TestCase
         $bytes = substr_replace(FixtureBuilder::mini(), pack('V', 0), 1024, 4);
 
         $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Cycle in sector chain.');
         $this->parse($bytes)->getStreamContents('Small');
+    }
+
+    public function testRejectsCycleShorterThanTheRequestedRange(): void
+    {
+        // Data occupies sectors 2 to 9. Sending sector 5 back to 3 makes the chain
+        // repeat after four sectors, far below the 128 entries of its FAT, so a
+        // detector that only counts steps against the table size would return the
+        // looping sectors as data. The first read ends before the cycle and must
+        // succeed; the detector state has to survive into the second read.
+        $payload = str_repeat('x', 4096);
+        $bytes = substr_replace(FixtureBuilder::regularWithPayload($payload), pack('V', 3), 1024 + 5 * 4, 4);
+        $stream = $this->parse($bytes)->openStream('Data');
+        self::assertSame(1024, strlen($stream->read(1024)));
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Cycle in sector chain.');
+        $stream->read(3072);
+    }
+
+    public function testCycleErrorIsNotCachedForLaterReads(): void
+    {
+        // Sectors 2, 3 and 4 hold A, B and C, and FAT[4] = 2 closes the loop at the
+        // chain's first sector. After a failed read, a later read of a range the
+        // failed walk had already passed must fail too rather than being served
+        // from a half-walked chain.
+        $payload = str_repeat('A', 512).str_repeat('B', 512).str_repeat('C', 512).str_repeat('x', 2560);
+        $bytes = substr_replace(FixtureBuilder::regularWithPayload($payload), pack('V', 2), 1024 + 4 * 4, 4);
+        $file = $this->parse($bytes);
+        foreach ([1, 2] as $attempt) {
+            try {
+                $file->getStreamContents('Data');
+                self::fail(sprintf('Full read %d returned looping data.', $attempt));
+            } catch (CfbfException $exception) {
+                self::assertSame('Cycle in sector chain.', $exception->getMessage());
+            }
+        }
+
+        $stream = $file->openStream('Data');
+        $stream->seek(1536);
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Cycle in sector chain.');
+        $stream->read(1536);
     }
 
     public function testAllowsRootMiniStreamSizeLargerThanItsFatChain(): void
