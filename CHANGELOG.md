@@ -21,6 +21,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   open file holds 10.0 MiB instead of 16.8 MiB. Reading and rewriting a
   64 MiB stream peaks at 12.0 and 14.3 MiB instead of 14.0 and 18.3 MiB, at
   the same speed.
+- Opening a file no longer copies its FAT, mini-FAT and DIFAT while decoding
+  them. Reading a 160 MiB stream now peaks at 11.3 MiB instead of 18.0 MiB,
+  and opening a 64 MiB file at 8.0 MiB instead of 12.0 MiB. Open and read
+  times are unchanged.
 
 ## [0.3.0] - 2026-09-23
 

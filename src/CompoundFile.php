@@ -620,15 +620,20 @@ final class CompoundFile
             return [];
         }
 
+        // unpack() numbers from 1. Decoding a leading dummy word and shifting it off
+        // renumbers the array in place; array_values() would copy the whole table.
         $values = unpack(
             $this->littleEndian ? 'V*' : 'N*',
-            substr($bytes, 0, $usable),
+            "\0\0\0\0".substr($bytes, 0, $usable),
         );
-        if ($values === false) {
+        if ($values !== false) {
+            array_shift($values);
+        }
+        if ($values === false || !array_is_list($values)) {
             throw new CfbfException('Cannot decode a 32-bit integer array.');
         }
 
-        return array_values($values);
+        return $values;
     }
     private function u16(string $bytes, int $offset): int
     {
