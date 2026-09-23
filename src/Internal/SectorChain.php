@@ -21,11 +21,11 @@ final class SectorChain
      * chain's first unit and moves two links for every later unit the walk emits, so
      * it costs one integer instead of a set of every unit visited. The two meet no
      * later than the walk's first repeated unit, so a cycle is reported before any
-     * caller receives it, and at most one cycle length earlier, so a read that stops
-     * just short of the repeat fails as well. Once the hare reaches the end of the
-     * chain or a broken link
-     * it becomes null: a chain that terminates cannot cycle, and the walk reports the
-     * break itself when it gets there.
+     * caller receives it, and at most one cycle length earlier. When the cycle does
+     * not pass through the first unit, the report comes before the repeat, so a read
+     * that stops just short of it fails as well. Once the hare reaches the end of the
+     * chain or a broken link it becomes null: a chain that terminates cannot cycle,
+     * and the walk reports the break itself when it gets there.
      *
      * @param array<int, int> $table
      */

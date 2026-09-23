@@ -13,8 +13,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   being read, so memory grew with the stream: reading a single 160 MiB stream
   now peaks at 20 MiB instead of 46 MiB, at the same speed. A looping chain
   still fails with "Cycle in sector chain." before any repeated sector is
-  returned, but the error can now arrive up to one cycle length earlier, so a
-  read that stops just short of the repeat fails as well.
+  returned, but the error can now arrive up to one cycle length earlier: when
+  the loop does not go back to the stream's first sector, a read that stops
+  just short of the repeat fails as well.
 
 ## [0.3.0] - 2026-09-23
 
