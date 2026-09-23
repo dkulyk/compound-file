@@ -72,11 +72,7 @@ final class SectorChainCache
         if ($first === $known) {
             return $walked;
         }
-        $slice = substr($this->entries[$start]['sectors'], $first << 2, $count << 2);
-        if ($slice === '') {
-            return [];
-        }
-        $sectors = unpack('V*', $slice);
+        $sectors = unpack('V*', substr($this->entries[$start]['sectors'], $first << 2, $count << 2));
         if ($sectors === false) {
             throw new CfbfException('Cannot decode a cached sector chain.');
         }
