@@ -404,8 +404,8 @@ final class CompoundFile
             $low = $fields['sizeLow'];
             $high = $fields['sizeHigh'];
             $size = $this->majorVersion === 3 ? $low : $this->combine64($low, $high);
-            $creationFileTime = $this->fileTimeTicks($fields['creationLow'], $fields['creationHigh']);
-            $modifiedFileTime = $this->fileTimeTicks($fields['modifiedLow'], $fields['modifiedHigh']);
+            $creationFileTime = FileTime::ticks($fields['creationLow'], $fields['creationHigh']);
+            $modifiedFileTime = FileTime::ticks($fields['modifiedLow'], $fields['modifiedHigh']);
             $entry = new DirectoryEntry(
                 $this,
                 $id,
@@ -418,8 +418,8 @@ final class CompoundFile
                 $fields['childId'],
                 $this->decodeClassId($fields['classId']),
                 $fields['stateBits'],
-                $this->decodeFileTime($creationFileTime),
-                $this->decodeFileTime($modifiedFileTime),
+                FileTime::fromTicks($creationFileTime),
+                FileTime::fromTicks($modifiedFileTime),
                 $fields['startSector'],
                 $size,
                 $creationFileTime,
@@ -676,29 +676,6 @@ final class CompoundFile
         );
     }
 
-    /** Returns FILETIME ticks, or null when unset or not representable as a PHP integer. */
-    private function fileTimeTicks(int $low, int $high): ?int
-    {
-        if (($low === 0 && $high === 0) || $high > 0x7FFFFFFF || (PHP_INT_SIZE < 8 && $high !== 0)) {
-            return null;
-        }
-
-        return $high * 4294967296 + $low;
-    }
-
-    private function decodeFileTime(?int $ticks): ?\DateTimeImmutable
-    {
-        if ($ticks === null) {
-            return null;
-        }
-        $wholeSeconds = intdiv($ticks, 10_000_000);
-        $microseconds = intdiv($ticks % 10_000_000, 10);
-        $time = \DateTimeImmutable::createFromFormat(
-            'U.u',
-            sprintf('%d.%06d', $wholeSeconds - 11_644_473_600, $microseconds),
-        );
-        return $time === false ? null : $time;
-    }
     private function normalizePath(string $path): string
     {
         return PathNormalizer::normalize($path);

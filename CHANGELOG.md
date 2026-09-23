@@ -6,6 +6,29 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `FileTime` converts between Windows FILETIME and PHP date objects. Compound
+  files use FILETIME for directory entry timestamps, and property set streams
+  such as `\x05SummaryInformation` use the same encoding for `VT_FILETIME`
+  values, so code that parses those payloads no longer needs its own
+  conversion. `decode()`/`encode()` work on the eight little-endian bytes,
+  `ticks()`/`fromTicks()`/`toTicks()` on the raw tick count. `encode()` and
+  `toTicks()` accept any `DateTimeInterface`; results are always
+  `DateTimeImmutable` and keep microsecond precision. Dates outside the
+  representable range, 1601-01-01 to 30828-09-14 UTC, raise `CfbfException`
+  instead of overflowing, and a negative tick count decodes to `null`. A date
+  object resolves to microseconds, so `ticks()` and `fromTicks()` are the way
+  to keep an exact tick count when rewriting a value that was read rather than
+  computed.
+
+### Changed
+
+- `CompoundFileWriter::setTimestamps()` accepts any `DateTimeInterface`, so a
+  plain `DateTime` no longer has to be converted by the caller. Mutable dates
+  are copied on the way in, and `DirectoryEntry` still returns
+  `DateTimeImmutable`.
+
 ## [0.2.7] - 2026-09-09
 
 ### Fixed

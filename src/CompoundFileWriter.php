@@ -178,15 +178,20 @@ final class CompoundFileWriter
         return $this;
     }
 
-    /** Changes the creation and modification FILETIME metadata of an entry. */
+    /**
+     * Changes the creation and modification FILETIME metadata of an entry.
+     *
+     * Mutable dates are copied, so later changes to the caller's object do not
+     * reach the entry.
+     */
     public function setTimestamps(
         string $path,
-        ?\DateTimeImmutable $creationTime,
-        ?\DateTimeImmutable $modifiedTime,
+        ?\DateTimeInterface $creationTime,
+        ?\DateTimeInterface $modifiedTime,
     ): self {
         $entry = $this->entry($path);
-        $entry->creationTime = $creationTime;
-        $entry->modifiedTime = $modifiedTime;
+        $entry->creationTime = $creationTime === null ? null : \DateTimeImmutable::createFromInterface($creationTime);
+        $entry->modifiedTime = $modifiedTime === null ? null : \DateTimeImmutable::createFromInterface($modifiedTime);
         $entry->creationFileTimeTicks = null;
         $entry->modifiedFileTimeTicks = null;
 
@@ -544,18 +549,12 @@ final class CompoundFileWriter
             .hex2bin($parts[4].$parts[5]);
     }
 
-    private function encodeFileTime(?\DateTimeImmutable $time, ?int $originalTicks): string
+    private function encodeFileTime(?\DateTimeInterface $time, ?int $originalTicks): string
     {
         if ($time === null) {
-            return str_repeat("\0", 8);
+            return FileTime::UNSET;
         }
-        if ($originalTicks !== null) {
-            return $this->u32($originalTicks % 4294967296).$this->u32(intdiv($originalTicks, 4294967296));
-        }
-        if ($time->getTimestamp() < -11_644_473_600) {
-            throw new CfbfException('CFBF timestamps cannot be earlier than 1601-01-01 UTC.');
-        }
-        $ticks = ($time->getTimestamp() + 11_644_473_600) * 10_000_000 + (int) $time->format('u') * 10;
+        $ticks = $originalTicks ?? FileTime::toTicks($time);
 
         return $this->u32($ticks % 4294967296).$this->u32(intdiv($ticks, 4294967296));
     }
