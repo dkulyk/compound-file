@@ -86,10 +86,18 @@ final class CompoundFileWriterTest extends TestCase
         $writer->setStreamContents('Малий', str_repeat('m', 333));
         $writer->setStreamContents('Сховище/Потік', str_repeat('BE', 2500));
 
+        $created = new \DateTimeImmutable('2026-09-03 12:34:56.123456', new \DateTimeZone('UTC'));
+        $writer->setTimestamps('Малий', $created, null);
+
         $file = $this->roundTrip($writer);
         self::assertTrue($file->getHeader()->isBigEndian());
         self::assertSame(str_repeat('m', 333), $file->getStreamContents('Малий'));
         self::assertSame(str_repeat('BE', 2500), $file->getStreamContents('Сховище/Потік'));
+        // FILETIME halves are packed with the container's byte order, not always little-endian.
+        self::assertSame(
+            '2026-09-03 12:34:56.123456',
+            $file->findEntry('Малий')?->getCreationTime()?->format('Y-m-d H:i:s.u')
+        );
     }
 
     public function testUnicodePathRegistryUsesCfbfCaseFolding(): void

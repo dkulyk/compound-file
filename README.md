@@ -229,6 +229,17 @@ $writer->setTimestamps(
 );
 ```
 
+Compound files store timestamps as Windows FILETIME. Property set streams such
+as `\x05SummaryInformation` use the same encoding for their `VT_FILETIME`
+values, so `FileTime` is public for code that parses those payloads:
+
+```php
+use DK\CompoundFile\FileTime;
+
+$created = FileTime::decode(substr($summaryInformation, $offset, 8));
+$bytes = FileTime::encode(new DateTimeImmutable('2025-01-01 00:00:00 UTC'));
+```
+
 The writer rebuilds FAT, DIFAT, mini-FAT, mini-stream, directory sectors, and
 red-black directory trees on every save. Stream sizes below 4096 bytes use the
 mini-stream; streams at or above that boundary use the regular FAT.
@@ -369,9 +380,19 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 | `remove(string $path): bool` | Remove a stream or complete storage subtree. |
 | `setClassId(string $path, string $classId): self` | Set entry CLSID metadata. |
 | `setStateBits(string $path, int $bits): self` | Set application state bits. |
-| `setTimestamps(string $path, ?DateTimeImmutable $created, ?DateTimeImmutable $modified): self` | Set FILETIME metadata. |
+| `setTimestamps(string $path, ?DateTimeInterface $created, ?DateTimeInterface $modified): self` | Set FILETIME metadata. |
 | `save(string $path): void` | Atomically save to a filesystem path. |
 | `saveToResource(resource $resource): void` | Save to an open seekable resource. |
+
+### `FileTime`
+
+| Method | Description |
+| --- | --- |
+| `decode(string $bytes): ?DateTimeImmutable` | Decode eight little-endian FILETIME bytes. |
+| `encode(?DateTimeInterface $time): string` | Encode eight little-endian FILETIME bytes. |
+| `ticks(int $low, int $high): ?int` | Combine the halves of a FILETIME into a tick count. |
+| `fromTicks(?int $ticks): ?DateTimeImmutable` | Convert a tick count to UTC. |
+| `toTicks(DateTimeInterface $time): int` | Convert a date to a tick count. |
 
 ## Error handling
 

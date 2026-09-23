@@ -75,6 +75,19 @@ final class MetadataTest extends TestCase
         self::assertSame($created->format('U.u'), $entry?->getCreationTime()?->format('U.u'));
     }
 
+    public function testAcceptsMutableTimestampsAndCopiesThem(): void
+    {
+        $created = new \DateTime('2026-09-03 12:34:56.123456 UTC');
+        $writer = CompoundFileWriter::create();
+        $writer->setStreamContents('Data', 'value');
+        $writer->setTimestamps('Data', $created, $created);
+        $created->modify('+10 years');
+
+        $entry = $this->roundTrip($writer)->findEntry('Data');
+        self::assertSame('2026-09-03 12:34:56.123456', $entry?->getCreationTime()?->format('Y-m-d H:i:s.u'));
+        self::assertSame('2026-09-03 12:34:56.123456', $entry?->getModifiedTime()?->format('Y-m-d H:i:s.u'));
+    }
+
     private function parse(string $bytes): CompoundFile
     {
         $resource = fopen('php://temp', 'w+b');
