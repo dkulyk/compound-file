@@ -347,15 +347,17 @@ final class CompoundFileWriter
 
         // Sectors are allocated back to back from 0 in this order, so the FAT is the
         // chains, then the DIFAT and FAT markers, then free entries.
-        $fat = $this->packChain($directoryStart, $directorySectorCount);
+        $endEntry = $this->u32(self::END);
+        $fat = $this->packChain($directoryStart, $directorySectorCount, $endEntry);
         if ($miniFatSectorCount > 0) {
-            $fat .= $this->packChain($miniFatStart, $miniFatSectorCount);
+            $fat .= $this->packChain($miniFatStart, $miniFatSectorCount, $endEntry);
         }
         if ($miniStreamSectorCount > 0) {
-            $fat .= $this->packChain($miniStreamStart, $miniStreamSectorCount);
+            $fat .= $this->packChain($miniStreamStart, $miniStreamSectorCount, $endEntry);
         }
         foreach ($regularStreams as $stream) {
-            $fat .= $this->packChain($stream['start'], $stream['count']);
+            // Many files hold thousands of one-sector chains; skip the call for them.
+            $fat .= $stream['count'] === 1 ? $endEntry : $this->packChain($stream['start'], $stream['count'], $endEntry);
         }
         $fat .= str_repeat($this->u32(self::DIFAT), $difatSectorCount);
         $fat .= str_repeat($this->u32(self::FAT), $fatSectorCount);
@@ -392,7 +394,7 @@ final class CompoundFileWriter
         if ($miniFatSectorCount > 0) {
             $miniFat = '';
             foreach ($miniStreams as $stream) {
-                $miniFat .= $this->packChain($stream['start'], $stream['count']);
+                $miniFat .= $stream['count'] === 1 ? $endEntry : $this->packChain($stream['start'], $stream['count'], $endEntry);
             }
             $miniFat .= str_repeat($this->u32(self::FREE), $miniFatSectorCount * $entriesPerFatSector - $miniSectorCount);
             $this->writeAll($resource, $miniFat);
@@ -474,9 +476,8 @@ final class CompoundFileWriter
         return [$fat, $difat];
     }
 
-    /** @param array<int, int> $table */
     /** Packs the allocation table entries of a chain of consecutive sectors. */
-    private function packChain(int $start, int $count): string
+    private function packChain(int $start, int $count, string $endEntry): string
     {
         $format = $this->littleEndian ? 'V*' : 'N*';
         $packed = '';
@@ -485,7 +486,7 @@ final class CompoundFileWriter
             $packed .= pack($format, ...range($next, min($next + 1023, $end - 1)));
         }
 
-        return $packed.$this->u32(self::END);
+        return $packed.$endEntry;
     }
 
     /** @param list<int> $fatSectors */

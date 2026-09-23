@@ -191,6 +191,36 @@ final class CompoundFileWriterTest extends TestCase
         self::assertSame('after', $file->getStreamContents('keep'));
     }
 
+    public function testUnusedAllocationEntriesAreFree(): void
+    {
+        $writer = CompoundFileWriter::create();
+        $writer->setStreamContents('Mini', str_repeat('m', 100));
+        $writer->setStreamContents('Tiny', 'one mini sector');
+        $writer->setStreamContents('Big', str_repeat('b', 5000));
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        $writer->saveToResource($resource);
+        $size = fstat($resource)['size'] ?? 0;
+        rewind($resource);
+        $tables = CompoundFile::fromResource($resource)->getAllocationTable();
+
+        // Every sector after the header has a FAT entry; the rest of the table is free.
+        $unused = array_slice($tables->getFat(), intdiv($size, 512) - 1);
+        self::assertNotSame([], $unused);
+        self::assertSame(array_fill(0, count($unused), 0xFFFFFFFF), $unused);
+        // 'Mini' and 'Tiny' take three 64-byte mini sectors, and each chain ends.
+        $unused = array_slice($tables->getMiniFat(), 3);
+        self::assertNotSame([], $unused);
+        self::assertSame(array_fill(0, count($unused), 0xFFFFFFFF), $unused);
+        self::assertSame(2, array_count_values($tables->getMiniFat())[0xFFFFFFFE] ?? 0);
+
+        // In version 4 a 4096-byte stream is a one-sector chain, like the directory.
+        $single = CompoundFileWriter::create(4);
+        $single->setStreamContents('One', str_repeat('o', 4096));
+        $fat = $this->roundTrip($single)->getAllocationTable()->getFat();
+        self::assertSame(2, array_count_values($fat)[0xFFFFFFFE] ?? 0);
+    }
+
     public function testCreatesAndReadsDifatSectors(): void
     {
         $contents = $this->contents(8 * 1024 * 1024);
