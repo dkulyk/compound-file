@@ -345,23 +345,23 @@ final class CompoundFileWriter
         $fatSectors = range($nextSector, $nextSector + $fatSectorCount - 1);
         $totalSectorCount = $nextSector + $fatSectorCount;
 
-        $fat = array_fill(0, $fatSectorCount * $entriesPerFatSector, self::FREE);
-        $this->markChain($fat, $directoryStart, $directorySectorCount);
+        // Sectors are allocated back to back from 0 in this order, so the FAT is the
+        // chains, then the DIFAT and FAT markers, then free entries.
+        $endEntry = $this->u32(self::END);
+        $fat = $this->packChain($directoryStart, $directorySectorCount, $endEntry);
         if ($miniFatSectorCount > 0) {
-            $this->markChain($fat, $miniFatStart, $miniFatSectorCount);
+            $fat .= $this->packChain($miniFatStart, $miniFatSectorCount, $endEntry);
         }
         if ($miniStreamSectorCount > 0) {
-            $this->markChain($fat, $miniStreamStart, $miniStreamSectorCount);
+            $fat .= $this->packChain($miniStreamStart, $miniStreamSectorCount, $endEntry);
         }
         foreach ($regularStreams as $stream) {
-            $this->markChain($fat, $stream['start'], $stream['count']);
+            // Many files hold thousands of one-sector chains; skip the call for them.
+            $fat .= $stream['count'] === 1 ? $endEntry : $this->packChain($stream['start'], $stream['count'], $endEntry);
         }
-        foreach ($difatSectors as $sector) {
-            $fat[$sector] = self::DIFAT;
-        }
-        foreach ($fatSectors as $sector) {
-            $fat[$sector] = self::FAT;
-        }
+        $fat .= str_repeat($this->u32(self::DIFAT), $difatSectorCount);
+        $fat .= str_repeat($this->u32(self::FAT), $fatSectorCount);
+        $fat .= str_repeat($this->u32(self::FREE), $fatSectorCount * $entriesPerFatSector - $totalSectorCount);
 
         $tree = (new DirectoryTreeBuilder())->build($orderedEntries);
         $streamLocations = [];
@@ -392,11 +392,12 @@ final class CompoundFileWriter
         $this->writeAll($resource, str_pad($directory, $directorySectorCount * $sectorSize, "\0"));
 
         if ($miniFatSectorCount > 0) {
-            $miniFat = array_fill(0, $miniFatSectorCount * $entriesPerFatSector, self::FREE);
+            $miniFat = '';
             foreach ($miniStreams as $stream) {
-                $this->markChain($miniFat, $stream['start'], $stream['count']);
+                $miniFat .= $stream['count'] === 1 ? $endEntry : $this->packChain($stream['start'], $stream['count'], $endEntry);
             }
-            $this->writeAll($resource, $this->packUInt32Array(array_values($miniFat)));
+            $miniFat .= str_repeat($this->u32(self::FREE), $miniFatSectorCount * $entriesPerFatSector - $miniSectorCount);
+            $this->writeAll($resource, $miniFat);
         }
 
         if ($miniStreamSectorCount > 0) {
@@ -437,7 +438,7 @@ final class CompoundFileWriter
                 $this->writeAll($resource, $this->packUInt32Array($values));
             }
         }
-        $this->writeAll($resource, $this->packUInt32Array(array_values($fat)));
+        $this->writeAll($resource, $fat);
 
         $expectedSize = $sectorSize * (1 + $totalSectorCount);
         $position = ftell($resource);
@@ -475,12 +476,17 @@ final class CompoundFileWriter
         return [$fat, $difat];
     }
 
-    /** @param array<int, int> $table */
-    private function markChain(array &$table, int $start, int $count): void
+    /** Packs the allocation table entries of a chain of consecutive sectors. */
+    private function packChain(int $start, int $count, string $endEntry): string
     {
-        for ($index = 0; $index < $count; $index++) {
-            $table[$start + $index] = $index + 1 < $count ? $start + $index + 1 : self::END;
+        $format = $this->littleEndian ? 'V*' : 'N*';
+        $packed = '';
+        // Chunks keep the range() array small however long the chain is.
+        for ($next = $start + 1, $end = $start + $count; $next < $end; $next += 1024) {
+            $packed .= pack($format, ...range($next, min($next + 1023, $end - 1)));
         }
+
+        return $packed.$endEntry;
     }
 
     /** @param list<int> $fatSectors */
