@@ -14,6 +14,18 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   opening many files could run out of descriptors. It never closes a resource
   or parser supplied by the caller.
 
+### Removed
+
+- **Breaking:** big-endian support. MS-CFB requires the byte-order field to be
+  0xFFFE, little-endian, and no known producer writes anything else, so the
+  big-endian variant was an extension that only this library could read.
+  `CompoundFile` now rejects such a file with "Invalid CFBF byte-order marker;
+  only little-endian files are supported.", and `CompoundFileWriter::create()`
+  no longer takes a byte order. `Header::LITTLE_ENDIAN`, `Header::BIG_ENDIAN`,
+  `Header::getByteOrder()`, `Header::isLittleEndian()` and
+  `Header::isBigEndian()` are gone, and the `Header` constructor no longer
+  takes a byte order.
+
 ### Fixed
 
 - `FileTime::toTicks()` and `encode()` raised a `TypeError` for a date in the
