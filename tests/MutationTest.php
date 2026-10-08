@@ -15,7 +15,6 @@ final class MutationTest extends TestCase
         $fixtures = [
             'regular' => FixtureBuilder::regular(),
             'mini' => FixtureBuilder::mini(),
-            'big-endian' => FixtureBuilder::regular('Data', false),
         ];
         $handled = 0;
 
@@ -52,7 +51,7 @@ final class MutationTest extends TestCase
             restore_error_handler();
         }
 
-        self::assertSame(999, $handled);
+        self::assertSame(666, $handled);
     }
 
     /** @return array<string, string> */

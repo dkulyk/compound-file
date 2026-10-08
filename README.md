@@ -16,9 +16,9 @@ access to the storages and streams inside legacy Microsoft Office files such as
 - CFBF version 3 and version 4
 - FAT, DIFAT, and mini-FAT chains
 - 512-byte and 4096-byte sectors
-- Little-endian and big-endian files
+- Little-endian files, the only byte order MS-CFB allows
 - 64-bit stream sizes
-- UTF-16LE/BE names converted to UTF-8
+- UTF-16LE names converted to UTF-8
 - Nested storages and case-insensitive path lookup
 - Incremental and seekable stream reading
 - Creation and full-file rewriting of compound files
@@ -156,11 +156,10 @@ function wordDocument(string $path): Stream
 ### Creating a file
 
 `CompoundFileWriter::create()` creates a version 3 file with 512-byte sectors
-and little-endian integers by default:
+by default:
 
 ```php
 use DK\CompoundFile\CompoundFileWriter;
-use DK\CompoundFile\Header;
 
 $writer = CompoundFileWriter::create();
 $writer->setStreamContents('Data', $contents);
@@ -168,9 +167,6 @@ $writer->save('container.ole');
 
 // Version 4 uses 4096-byte sectors.
 $version4 = CompoundFileWriter::create(4);
-
-// Big-endian output is supported for compatible consumers.
-$bigEndian = CompoundFileWriter::create(3, Header::BIG_ENDIAN);
 ```
 
 `createStorage()` creates all missing parents. A stream's parent must already
@@ -202,6 +198,24 @@ $writer->save('result.doc');
 An existing seekable resource can be imported with
 `CompoundFileWriter::fromResource($resource)`. The caller retains ownership and
 must keep the source open until saving finishes.
+
+A writer made by `open()` keeps the source file open so it can copy streams
+when saving. The handle is released when the writer is destroyed; call
+`close()` to release it earlier, for example before replacing or deleting the
+source file:
+
+```php
+$writer = CompoundFileWriter::open('template.doc');
+try {
+    $writer->setStreamContents('WordDocument', $wordDocument);
+    $writer->save('result.doc');
+} finally {
+    $writer->close();
+}
+```
+
+`close()` never closes a resource or parser supplied by the caller. After it,
+saving fails for streams that still come from the source.
 
 Saving to the original path is supported. Filesystem saves are flushed and
 synchronized to storage, written to a temporary file in the destination
@@ -306,11 +320,10 @@ $header = $file->getHeader();
 
 echo $header->getMajorVersion();
 echo $header->getSectorSize();
-echo $header->getByteOrder();
 echo $header->getDirectorySectorCount();
 ```
 
-`Header` exposes the CFBF version, byte order, sector shifts and sizes,
+`Header` exposes the CFBF version, sector shifts and sizes,
 transaction signature, mini-stream cutoff, and declared FAT, mini-FAT, and
 DIFAT locations and counts. Version 4 headers also expose the declared
 directory-sector count.
@@ -387,7 +400,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 
 | Method | Description |
 | --- | --- |
-| `create(int $version = 3, string $byteOrder = Header::LITTLE_ENDIAN): self` | Create an empty writer model. |
+| `create(int $version = 3): self` | Create an empty writer model. |
 | `open(string $path): self` | Import an existing compound file lazily. |
 | `fromResource(resource $resource): self` | Import a compound file from an existing resource. |
 | `fromCompoundFile(CompoundFile $file): self` | Import an existing parsed container. |
@@ -402,6 +415,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 | `setTimestamps(string $path, ?DateTimeInterface $created, ?DateTimeInterface $modified): self` | Set FILETIME metadata. |
 | `save(string $path): void` | Atomically save to a filesystem path. |
 | `saveToResource(resource $resource): void` | Save to an open seekable resource. |
+| `close(): void` | Release the source opened by `open()` or parsed by `fromResource()`. |
 
 ### `FileTime`
 
@@ -409,7 +423,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 | --- | --- |
 | `decode(string $bytes): ?DateTimeImmutable` | Decode eight little-endian FILETIME bytes. |
 | `encode(?DateTimeInterface $time): string` | Encode eight little-endian FILETIME bytes. |
-| `ticks(int $low, int $high): ?int` | Combine the halves of a FILETIME into a tick count. |
+| `ticks(int $low, int $high): ?int` | Combine the unsigned 32-bit halves of a FILETIME into a tick count. |
 | `fromTicks(?int $ticks): ?DateTimeImmutable` | Convert a tick count to UTC. |
 | `toTicks(DateTimeInterface $time): int` | Convert a date to a tick count. |
 

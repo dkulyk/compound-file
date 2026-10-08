@@ -19,34 +19,70 @@ final class ValidationTest extends TestCase
     private const HEADER_MINI_STREAM_CUTOFF = 56;
     private const DIRECTORY_SECOND_ENTRY = 512 + 128;
 
-    /** @return iterable<string, array{string, bool, bool}> */
+    /** @return iterable<string, array{string, bool}> */
     public static function reservedDirectoryNames(): iterable
     {
         foreach (['/' => 'slash', '\\' => 'backslash', ':' => 'colon', '!' => 'exclamation'] as $character => $label) {
-            foreach ([true, false] as $little) {
-                foreach ([false, true] as $streamParent) {
-                    yield $label.'-'.($little ? 'le' : 'be').'-'.($streamParent ? 'stream-parent' : 'missing-parent')
-                        => ['A'.$character.'B', $little, $streamParent];
-                }
+            foreach ([false, true] as $streamParent) {
+                yield $label.'-'.($streamParent ? 'stream-parent' : 'missing-parent') => ['A'.$character.'B', $streamParent];
             }
         }
     }
 
     #[DataProvider('reservedDirectoryNames')]
-    public function testRejectsReservedNamesBeforeWriterImport(string $name, bool $little, bool $streamParent): void
+    public function testRejectsReservedNamesBeforeWriterImport(string $name, bool $streamParent): void
     {
-        $bytes = FixtureBuilder::regular($name, $little);
+        $bytes = FixtureBuilder::regular($name);
         if ($streamParent) {
             // Add a root sibling stream A: interpreting A/B as a path would
             // otherwise attach the imported entry beneath a stream on save.
-            $entry = substr(FixtureBuilder::regular('A', $little), self::DIRECTORY_SECOND_ENTRY, 128);
+            $entry = substr(FixtureBuilder::regular('A'), self::DIRECTORY_SECOND_ENTRY, 128);
             $bytes = substr_replace($bytes, $entry, self::DIRECTORY_SECOND_ENTRY + 128, 128);
-            $bytes = substr_replace($bytes, pack($little ? 'V' : 'N', 2), self::DIRECTORY_SECOND_ENTRY + 68, 4);
+            $bytes = substr_replace($bytes, pack('V', 2), self::DIRECTORY_SECOND_ENTRY + 68, 4);
         }
 
         $this->expectException(CfbfException::class);
         $this->expectExceptionMessage('contains a reserved character');
         CompoundFileWriter::fromCompoundFile($this->parse($bytes));
+    }
+
+    /** @return iterable<string, array{int, string, string}> */
+    public static function malformedDirectoryNames(): iterable
+    {
+        // The fixture stream is named "Data": four UTF-16LE units and a terminator.
+        yield 'non-null terminator' => [8, "X\0", 'is not null-terminated'];
+        yield 'half-null terminator' => [8, "\0\x01", 'is not null-terminated'];
+        yield 'unpaired high surrogate' => [2, "\x00\xD8", 'is not valid UTF-16'];
+        yield 'unpaired low surrogate' => [2, "\x00\xDC", 'is not valid UTF-16'];
+        yield 'embedded null' => [2, "\0\0", 'contains a null character'];
+    }
+
+    #[DataProvider('malformedDirectoryNames')]
+    public function testRejectsMalformedDirectoryNames(int $offset, string $unit, string $message): void
+    {
+        $bytes = substr_replace(FixtureBuilder::regular(), $unit, self::DIRECTORY_SECOND_ENTRY + $offset, 2);
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage($message);
+        $this->parse($bytes);
+    }
+
+    public function testRejectsEmptyNamesOutsideTheRoot(): void
+    {
+        // An empty name would give the stream the root's path and drop it on rewrite.
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('v', 2), self::DIRECTORY_SECOND_ENTRY + 64, 2);
+        $bytes = substr_replace($bytes, "\0\0", self::DIRECTORY_SECOND_ENTRY, 2);
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Directory entry name is empty.');
+        $this->parse($bytes);
+    }
+
+    public function testAcceptsSurrogatePairsInDirectoryNames(): void
+    {
+        $entry = $this->parse(FixtureBuilder::regular("A\u{1F600}B"))->findEntry("A\u{1F600}B");
+
+        self::assertNotNull($entry);
     }
 
     #[RunInSeparateProcess]

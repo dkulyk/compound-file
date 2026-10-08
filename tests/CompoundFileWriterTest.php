@@ -8,7 +8,6 @@ use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\DirectoryEntry;
 use DK\CompoundFile\Exception\CfbfException;
-use DK\CompoundFile\Header;
 use PHPUnit\Framework\TestCase;
 
 final class CompoundFileWriterTest extends TestCase
@@ -77,27 +76,6 @@ final class CompoundFileWriterTest extends TestCase
         self::assertSame(1, $file->getHeader()->getDirectorySectorCount());
         self::assertSame(str_repeat('m', 777), $file->getStreamContents('Mini'));
         self::assertSame(str_repeat('r', 12_345), $file->getStreamContents('Regular'));
-    }
-
-    public function testWritesBigEndianContainer(): void
-    {
-        $writer = CompoundFileWriter::create(3, Header::BIG_ENDIAN);
-        $writer->createStorage('Сховище');
-        $writer->setStreamContents('Малий', str_repeat('m', 333));
-        $writer->setStreamContents('Сховище/Потік', str_repeat('BE', 2500));
-
-        $created = new \DateTimeImmutable('2026-09-03 12:34:56.123456', new \DateTimeZone('UTC'));
-        $writer->setTimestamps('Малий', $created, null);
-
-        $file = $this->roundTrip($writer);
-        self::assertTrue($file->getHeader()->isBigEndian());
-        self::assertSame(str_repeat('m', 333), $file->getStreamContents('Малий'));
-        self::assertSame(str_repeat('BE', 2500), $file->getStreamContents('Сховище/Потік'));
-        // FILETIME halves are packed with the container's byte order, not always little-endian.
-        self::assertSame(
-            '2026-09-03 12:34:56.123456',
-            $file->findEntry('Малий')?->getCreationTime()?->format('Y-m-d H:i:s.u')
-        );
     }
 
     public function testUnicodePathRegistryUsesCfbfCaseFolding(): void
@@ -242,6 +220,62 @@ final class CompoundFileWriterTest extends TestCase
         }
         self::assertSame(strlen($contents), $file->findEntry('Large')?->getSize());
         self::assertSame(hash('sha256', $contents), hash('sha256', $file->getStreamContents('Large')));
+    }
+
+    public function testCloseReleasesTheOpenedSourceWithoutCycleCollection(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'compound-writer-');
+        self::assertIsString($path);
+        $collecting = gc_enabled();
+        gc_disable();
+        try {
+            CompoundFileWriter::create()->setStreamContents('Data', $this->contents(5000))->save($path);
+            $before = count(get_resources('stream'));
+            for ($index = 0; $index < 20; $index++) {
+                $writer = CompoundFileWriter::open($path);
+                $writer->close();
+                $writer->close();
+            }
+            self::assertSame($before, count(get_resources('stream')));
+            for ($index = 0; $index < 20; $index++) {
+                $writer = CompoundFileWriter::open($path);
+                unset($writer);
+            }
+            self::assertSame($before, count(get_resources('stream')), 'An abandoned writer releases its source.');
+        } finally {
+            $collecting ? gc_enable() : gc_disable();
+            @unlink($path);
+        }
+    }
+
+    public function testCloseLeavesCallerSuppliedSourcesOpen(): void
+    {
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        CompoundFileWriter::create()->setStreamContents('Data', 'payload')->saveToResource($resource);
+
+        CompoundFileWriter::fromResource($resource)->close();
+        self::assertIsResource($resource);
+
+        $file = CompoundFile::fromResource($resource);
+        CompoundFileWriter::fromCompoundFile($file)->close();
+        self::assertSame('payload', $file->getStreamContents('Data'));
+    }
+
+    public function testSavingImportedStreamsFailsAfterClose(): void
+    {
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        CompoundFileWriter::create()
+            ->setStreamContents('Kept', $this->contents(5000))
+            ->setStreamContents('Replaced', 'old')
+            ->saveToResource($resource);
+        $writer = CompoundFileWriter::fromResource($resource);
+        $writer->close();
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('The compound file has been closed.');
+        $this->roundTrip($writer);
     }
 
     public function testSaveCanAtomicallyReplaceItsSourceFile(): void
@@ -482,18 +516,11 @@ final class CompoundFileWriterTest extends TestCase
 
     public function testRejectsInvalidWriterConfigurationAndMetadata(): void
     {
-        foreach (
-            [
-                static fn (): CompoundFileWriter => CompoundFileWriter::create(2),
-                static fn (): CompoundFileWriter => CompoundFileWriter::create(3, 'middle'),
-            ] as $operation
-        ) {
-            try {
-                $operation();
-                self::fail('Invalid writer configuration was accepted.');
-            } catch (\InvalidArgumentException $exception) {
-                self::assertNotSame('', $exception->getMessage());
-            }
+        try {
+            CompoundFileWriter::create(2);
+            self::fail('Invalid writer configuration was accepted.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertNotSame('', $exception->getMessage());
         }
 
         $writer = CompoundFileWriter::create();

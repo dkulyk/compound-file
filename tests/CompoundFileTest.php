@@ -105,12 +105,12 @@ final class CompoundFileTest extends TestCase
         rewind($resource);
         self::assertSame(str_repeat('mini-', 20), CompoundFile::fromResource($resource)->getStreamContents('Small'));
     }
-    public function testReadsBigEndianNamesAndData(): void
+    public function testRejectsBigEndianByteOrderMarker(): void
     {
-        $resource = fopen('php://temp', 'w+b');
-        fwrite($resource, FixtureBuilder::regular('Дані', false));
-        rewind($resource);
-        self::assertSame(str_repeat('OLE2', 1024), CompoundFile::fromResource($resource)->getStreamContents('Дані'));
+        // MS-CFB requires the marker 0xFFFE, stored as FE FF.
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('only little-endian files are supported');
+        $this->parse(substr_replace(FixtureBuilder::regular(), "\xFF\xFE", 28, 2));
     }
 
     public function testUnicodePathLookupUsesTheSameCaseFoldingAsTheWriter(): void
@@ -119,21 +119,6 @@ final class CompoundFileTest extends TestCase
 
         self::assertTrue($file->hasStream('ünicode'));
         self::assertSame(str_repeat('OLE2', 1024), $file->getStreamContents('ÜNICODE'));
-    }
-
-    public function testLittleAndBigEndianFilesExposeEquivalentStreams(): void
-    {
-        $littleEndian = $this->parse(FixtureBuilder::regular('Equivalent', true));
-        $bigEndian = $this->parse(FixtureBuilder::regular('Equivalent', false));
-
-        self::assertSame(
-            array_map(static fn ($entry): string => $entry->getPath(), $littleEndian->getEntries()),
-            array_map(static fn ($entry): string => $entry->getPath(), $bigEndian->getEntries())
-        );
-        self::assertSame(
-            $littleEndian->getStreamContents('Equivalent'),
-            $bigEndian->getStreamContents('Equivalent')
-        );
     }
 
     public function testRejectsDirectoryEntryFromAnotherCompoundFile(): void
