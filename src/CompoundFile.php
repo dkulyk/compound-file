@@ -22,6 +22,8 @@ final class CompoundFile
     private const NONE = 0xFFFFFFFF;
 
     private RandomAccessReader $reader;
+    private int $openStreams = 0;
+    private bool $released = false;
     private Header $header;
     private bool $littleEndian;
     private int $majorVersion;
@@ -95,6 +97,34 @@ final class CompoundFile
         $this->regularChainCache->clear();
         $this->miniChainCache->clear();
         $this->miniStreamBlocks = [];
+    }
+
+    /**
+     * Closes the parser once no stream opened from it is left.
+     *
+     * Unlike close(), streams that are already open stay readable; the parser
+     * closes when the last of them is destroyed, or at once when there is none.
+     */
+    public function release(): void
+    {
+        $this->released = true;
+        if ($this->openStreams === 0) {
+            $this->close();
+        }
+    }
+
+    /** @internal */
+    public function streamOpened(): void
+    {
+        $this->openStreams++;
+    }
+
+    /** @internal */
+    public function streamClosed(): void
+    {
+        if (--$this->openStreams === 0 && $this->released) {
+            $this->close();
+        }
     }
 
     /** Returns the CFB major version (3 or 4). */

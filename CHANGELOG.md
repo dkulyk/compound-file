@@ -6,6 +6,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `CompoundFile::release()` closes the parser once no stream opened from it is
+  left: open streams stay readable, and the handle is closed when the last one
+  is destroyed. `close()` is unchanged and still closes at once.
+
 ## [0.3.1] - 2026-09-23
 
 ### Changed

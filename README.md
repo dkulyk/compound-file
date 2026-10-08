@@ -133,6 +133,21 @@ by `CompoundFile::open()` but never closes a resource supplied by the caller.
 The parser and streams created from it must not be used afterward. On Windows,
 close any other readers before atomically replacing the same file.
 
+`$file->release()` is the deferred form: streams that are already open stay
+readable, and the parser closes when the last of them is destroyed. Use it to
+hand a stream to a caller that never sees the parser:
+
+```php
+function wordDocument(string $path): Stream
+{
+    $file = CompoundFile::open($path);
+    $stream = $file->openStream('WordDocument');
+    $file->release();
+
+    return $stream;
+}
+```
+
 ## Writing compound files
 
 ### Creating a file
@@ -337,6 +352,7 @@ The returned arrays are diagnostic snapshots and cannot mutate parser state.
 | `open(string $path): self` | Open a filesystem file. |
 | `fromResource(resource $resource): self` | Parse an existing seekable resource. |
 | `close(): void` | Release the parser handle without closing caller-owned resources. |
+| `release(): void` | Close the parser when its last open stream is destroyed. |
 | `getMajorVersion(): int` | Return the CFBF major version (`3` or `4`). |
 | `getHeader(): Header` | Return immutable header metadata. |
 | `getAllocationTable(): AllocationTable` | Return allocation-table snapshots. |

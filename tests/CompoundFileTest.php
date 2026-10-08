@@ -11,6 +11,39 @@ use PHPUnit\Framework\TestCase;
 
 final class CompoundFileTest extends TestCase
 {
+    public function testReleaseClosesTheFileAfterItsLastStream(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'compound-release-');
+        self::assertIsString($path);
+        file_put_contents($path, FixtureBuilder::regular());
+        $collecting = gc_enabled();
+        gc_disable();
+        try {
+            $before = count(get_resources('stream'));
+            $file = CompoundFile::open($path);
+            $stream = $file->openStream('Data');
+            $copy = clone $stream;
+            $file->release();
+            unset($file);
+
+            self::assertSame($stream->getSize(), strlen($stream->getContents()));
+            unset($stream);
+            self::assertSame($copy->getSize(), strlen($copy->getContents()));
+            self::assertSame($before + 1, count(get_resources('stream')));
+            unset($copy);
+            self::assertSame($before, count(get_resources('stream')));
+
+            $file = CompoundFile::open($path);
+            $file->release();
+            self::assertSame($before, count(get_resources('stream')));
+            $this->expectExceptionMessage('The compound file has been closed.');
+            $file->getStreamContents('Data');
+        } finally {
+            $collecting ? gc_enable() : gc_disable();
+            @unlink($path);
+        }
+    }
+
     public function testChildrenPreserveRecordOrderAndNormalizedStorageLookup(): void
     {
         $writer = CompoundFileWriter::create();
