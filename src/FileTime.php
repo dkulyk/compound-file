@@ -61,9 +61,14 @@ final class FileTime
      * Combines the low and high halves of a FILETIME into a tick count.
      *
      * Returns null when the value is unset or not representable as a PHP integer.
+     *
+     * @throws \InvalidArgumentException when a half is not an unsigned 32-bit value
      */
     public static function ticks(int $low, int $high): ?int
     {
+        if ($low < 0 || $low > 0xFFFFFFFF || $high < 0 || $high > 0xFFFFFFFF) {
+            throw new \InvalidArgumentException('FILETIME halves must be unsigned 32-bit integers.');
+        }
         if (($low === 0 && $high === 0) || $high > 0x7FFFFFFF || (PHP_INT_SIZE < 8 && $high !== 0)) {
             return null;
         }
@@ -91,18 +96,24 @@ final class FileTime
      * Converts a date to a FILETIME tick count.
      *
      * @throws CfbfException when the date falls outside the representable range,
-     *                       which is 1601-01-01 UTC to 30828-09-14 02:48:05 UTC
+     *                       which is 1601-01-01 UTC to 30828-09-14 02:48:05.477580 UTC
      */
     public static function toTicks(\DateTimeInterface $time): int
     {
         $seconds = $time->getTimestamp();
+        $fraction = (int) $time->format('u') * 10;
         $maximum = intdiv(PHP_INT_MAX, self::TICKS_PER_SECOND) - self::EPOCH_OFFSET;
-        if ($seconds < -self::EPOCH_OFFSET || $seconds > $maximum) {
+        // The last second holds only the ticks that still fit a signed 64-bit count.
+        if (
+            $seconds < -self::EPOCH_OFFSET
+            || $seconds > $maximum
+            || ($seconds === $maximum && $fraction > PHP_INT_MAX % self::TICKS_PER_SECOND)
+        ) {
             throw new CfbfException(
                 sprintf('FILETIME cannot represent "%s"; the range is 1601-01-01 to 30828-09-14 UTC.', $time->format('c'))
             );
         }
 
-        return ($seconds + self::EPOCH_OFFSET) * self::TICKS_PER_SECOND + (int) $time->format('u') * 10;
+        return ($seconds + self::EPOCH_OFFSET) * self::TICKS_PER_SECOND + $fraction;
     }
 }

@@ -6,6 +6,7 @@ namespace DK\CompoundFile\Tests;
 
 use DK\CompoundFile\Exception\CfbfException;
 use DK\CompoundFile\FileTime;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class FileTimeTest extends TestCase
@@ -80,6 +81,40 @@ final class FileTimeTest extends TestCase
         $decoded = FileTime::fromTicks(PHP_INT_MAX);
         self::assertNotNull($decoded);
         self::assertSame('30828-09-14 02:48:05.477580', $decoded->format('Y-m-d H:i:s.u'));
+    }
+
+    public function testConvertsDatesUpToTheLastRepresentableMicrosecond(): void
+    {
+        $last = FileTime::fromTicks(PHP_INT_MAX);
+        self::assertNotNull($last);
+        // The date drops the final seven ticks, which a microsecond cannot hold.
+        self::assertSame(PHP_INT_MAX - 7, FileTime::toTicks($last));
+        self::assertSame(PHP_INT_MAX - 17, FileTime::toTicks($last->modify('-1 microsecond')));
+    }
+
+    public function testRejectsTheMicrosecondAfterTheLastRepresentableOne(): void
+    {
+        $last = FileTime::fromTicks(PHP_INT_MAX);
+        self::assertNotNull($last);
+
+        $this->expectException(CfbfException::class);
+        FileTime::toTicks($last->modify('+1 microsecond'));
+    }
+
+    #[DataProvider('invalidHalves')]
+    public function testRejectsHalvesOutsideTheUnsigned32BitRange(int $low, int $high): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        FileTime::ticks($low, $high);
+    }
+
+    /** @return iterable<string, array{int, int}> */
+    public static function invalidHalves(): iterable
+    {
+        yield 'negative low' => [-1, 0];
+        yield 'negative high' => [0, -1];
+        yield 'low above 32 bits' => [0x100000000, 0];
+        yield 'high above 32 bits' => [0, 0x100000000];
     }
 
     public function testRejectsDatesBeyondTheRepresentableRange(): void
