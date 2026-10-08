@@ -6,6 +6,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Directory entry names are validated instead of repaired. A name whose last
+  two bytes are not a null terminator, that is not valid UTF-16 (an unpaired
+  surrogate), or that contains a null character is rejected with a
+  `CfbfException`. Before, the terminator bytes were dropped unchecked, an
+  unpaired surrogate became "?", and an embedded null was kept, so two
+  different on-disk names could read back as the same path.
+
 ### Removed
 
 - **Breaking:** big-endian support. MS-CFB requires the byte-order field to be
