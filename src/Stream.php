@@ -16,6 +16,17 @@ final class Stream
     {
         $this->file = $file;
         $this->entry = $entry;
+        $file->streamOpened();
+    }
+
+    public function __clone()
+    {
+        $this->file->streamOpened();
+    }
+
+    public function __destruct()
+    {
+        $this->file->streamClosed();
     }
     /** Returns the total stream size in bytes. */
     public function getSize(): int

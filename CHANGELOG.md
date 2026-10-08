@@ -13,6 +13,9 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Before, the handle stayed open until PHP's cycle collector ran, so a worker
   opening many files could run out of descriptors. It never closes a resource
   or parser supplied by the caller.
+- `CompoundFile::release()` closes the parser once no stream opened from it is
+  left: open streams stay readable, and the handle is closed when the last one
+  is destroyed. `close()` is unchanged and still closes at once.
 
 ### Removed
 
