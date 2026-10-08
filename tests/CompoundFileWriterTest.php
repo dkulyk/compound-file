@@ -244,6 +244,62 @@ final class CompoundFileWriterTest extends TestCase
         self::assertSame(hash('sha256', $contents), hash('sha256', $file->getStreamContents('Large')));
     }
 
+    public function testCloseReleasesTheOpenedSourceWithoutCycleCollection(): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'compound-writer-');
+        self::assertIsString($path);
+        $collecting = gc_enabled();
+        gc_disable();
+        try {
+            CompoundFileWriter::create()->setStreamContents('Data', $this->contents(5000))->save($path);
+            $before = count(get_resources('stream'));
+            for ($index = 0; $index < 20; $index++) {
+                $writer = CompoundFileWriter::open($path);
+                $writer->close();
+                $writer->close();
+            }
+            self::assertSame($before, count(get_resources('stream')));
+            for ($index = 0; $index < 20; $index++) {
+                $writer = CompoundFileWriter::open($path);
+                unset($writer);
+            }
+            self::assertSame($before, count(get_resources('stream')), 'An abandoned writer releases its source.');
+        } finally {
+            $collecting ? gc_enable() : gc_disable();
+            @unlink($path);
+        }
+    }
+
+    public function testCloseLeavesCallerSuppliedSourcesOpen(): void
+    {
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        CompoundFileWriter::create()->setStreamContents('Data', 'payload')->saveToResource($resource);
+
+        CompoundFileWriter::fromResource($resource)->close();
+        self::assertIsResource($resource);
+
+        $file = CompoundFile::fromResource($resource);
+        CompoundFileWriter::fromCompoundFile($file)->close();
+        self::assertSame('payload', $file->getStreamContents('Data'));
+    }
+
+    public function testSavingImportedStreamsFailsAfterClose(): void
+    {
+        $resource = fopen('php://temp', 'w+b');
+        self::assertIsResource($resource);
+        CompoundFileWriter::create()
+            ->setStreamContents('Kept', $this->contents(5000))
+            ->setStreamContents('Replaced', 'old')
+            ->saveToResource($resource);
+        $writer = CompoundFileWriter::fromResource($resource);
+        $writer->close();
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('The compound file has been closed.');
+        $this->roundTrip($writer);
+    }
+
     public function testSaveCanAtomicallyReplaceItsSourceFile(): void
     {
         $path = tempnam(sys_get_temp_dir(), 'compound-writer-');
