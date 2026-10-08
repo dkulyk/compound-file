@@ -7,7 +7,6 @@ namespace DK\CompoundFile\Tests;
 use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\DirectoryEntry;
-use DK\CompoundFile\Header;
 use PHPUnit\Framework\TestCase;
 
 final class MetadataTest extends TestCase

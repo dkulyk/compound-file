@@ -15,7 +15,8 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   only little-endian files are supported.", and `CompoundFileWriter::create()`
   no longer takes a byte order. `Header::LITTLE_ENDIAN`, `Header::BIG_ENDIAN`,
   `Header::getByteOrder()`, `Header::isLittleEndian()` and
-  `Header::isBigEndian()` are gone.
+  `Header::isBigEndian()` are gone, and the `Header` constructor no longer
+  takes a byte order.
 
 ## [0.3.1] - 2026-09-23
 

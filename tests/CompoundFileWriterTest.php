@@ -8,7 +8,6 @@ use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\DirectoryEntry;
 use DK\CompoundFile\Exception\CfbfException;
-use DK\CompoundFile\Header;
 use PHPUnit\Framework\TestCase;
 
 final class CompoundFileWriterTest extends TestCase
