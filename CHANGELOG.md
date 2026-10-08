@@ -6,16 +6,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
+### Added
 
-- Directory entry names are validated instead of repaired. A name whose last
-  two bytes are not a null terminator, that is not valid UTF-16 (an unpaired
-  surrogate), that contains a null character, or that is empty outside the
-  root entry is rejected with a `CfbfException`. Before, the terminator bytes
-  were dropped unchecked, an unpaired surrogate became "?", and an embedded
-  null was kept, so two different on-disk names could read back as the same
-  path; a stream with an empty name took the root's path and was dropped when
-  the file was rewritten.
+- `CompoundFileWriter::close()` releases the source file that `open()` holds
+  for lazy stream copying, and a writer now calls it when it is destroyed.
+  Before, the handle stayed open until PHP's cycle collector ran, so a worker
+  opening many files could run out of descriptors. It never closes a resource
+  or parser supplied by the caller.
 
 ### Removed
 
@@ -28,6 +25,24 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Header::getByteOrder()`, `Header::isLittleEndian()` and
   `Header::isBigEndian()` are gone, and the `Header` constructor no longer
   takes a byte order.
+
+### Fixed
+
+- `FileTime::toTicks()` and `encode()` raised a `TypeError` for a date in the
+  last representable second, 30828-09-14 02:48:05 UTC, once its fraction went
+  past .477580. They now throw `CfbfException`, like any other date outside
+  the range.
+- `FileTime::ticks()` throws `InvalidArgumentException` when a half is not an
+  unsigned 32-bit value. It used to return a meaningless count, negative for a
+  negative half.
+- Directory entry names are validated instead of repaired. A name whose last
+  two bytes are not a null terminator, that is not valid UTF-16 (an unpaired
+  surrogate), that contains a null character, or that is empty outside the
+  root entry is rejected with a `CfbfException`. Before, the terminator bytes
+  were dropped unchecked, an unpaired surrogate became "?", and an embedded
+  null was kept, so two different on-disk names could read back as the same
+  path; a stream with an empty name took the root's path and was dropped when
+  the file was rewritten.
 
 ## [0.3.1] - 2026-09-23
 
