@@ -99,13 +99,19 @@ final class CompoundFileWriter
      * Releases the source that open() or fromResource() parsed.
      *
      * It closes the file handle open() holds; a resource supplied by the caller
-     * and a parser passed to fromCompoundFile() stay open. Imported streams that
-     * were not replaced can no longer be saved afterward. Safe to call repeatedly.
+     * and a parser passed to fromCompoundFile() stay open. After open() or
+     * fromResource(), imported streams that were not replaced can no longer be
+     * saved. Safe to call repeatedly, and called when the writer is destroyed.
      */
     public function close(): void
     {
         $this->ownedSource?->close();
         $this->ownedSource = null;
+    }
+
+    public function __destruct()
+    {
+        $this->close();
     }
 
     /** Returns true when a stream or storage exists at the supplied path. */

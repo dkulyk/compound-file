@@ -259,6 +259,11 @@ final class CompoundFileWriterTest extends TestCase
                 $writer->close();
             }
             self::assertSame($before, count(get_resources('stream')));
+            for ($index = 0; $index < 20; $index++) {
+                $writer = CompoundFileWriter::open($path);
+                unset($writer);
+            }
+            self::assertSame($before, count(get_resources('stream')), 'An abandoned writer releases its source.');
         } finally {
             $collecting ? gc_enable() : gc_disable();
             @unlink($path);

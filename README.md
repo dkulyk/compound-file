@@ -186,9 +186,9 @@ An existing seekable resource can be imported with
 must keep the source open until saving finishes.
 
 A writer made by `open()` keeps the source file open so it can copy streams
-when saving, and the handle is otherwise released only by PHP's cycle
-collector. In a long-running process, call `close()` when the writer is no
-longer needed:
+when saving. The handle is released when the writer is destroyed; call
+`close()` to release it earlier, for example before replacing or deleting the
+source file:
 
 ```php
 $writer = CompoundFileWriter::open('template.doc');
