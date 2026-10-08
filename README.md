@@ -32,7 +32,7 @@ access to the storages and streams inside legacy Microsoft Office files such as
 
 - PHP 8.1 or newer
 - `mbstring`
-- A 64-bit PHP build for streams outside the 32-bit integer range
+- A 64-bit PHP build
 
 ## Installation
 
@@ -92,20 +92,6 @@ if ($entry !== null && $entry->isStream()) {
 
 ### Incremental reading
 
-Small streams are read through a shared mini-stream payload cache, populated
-on demand in 64 KiB blocks and limited to 1 MiB per parser. Opening a file still
-loads allocation tables and directory metadata and validates the root sector
-chain, but does not load the complete mini-stream payload. Resolved sector chains are cached
-under their own budget of 1,024 chains and 32,768 sectors, so reading many
-streams from one parser does not grow the cache without limit. The chain being
-read is exempt from that budget, so a single very long chain can exceed it
-while it is in use. Neither limit bounds total parser memory: the allocation
-tables themselves scale with the file size.
-
-`close()` drops both caches. Directory entries reference the parser, so an
-abandoned parser is only reclaimed by PHP's cycle collector; calling `close()`
-releases the cached bytes immediately.
-
 ```php
 $stream = $file->openStream('WordDocument');
 
@@ -117,6 +103,22 @@ $trailer = $stream->read(16);
 `Stream::seek()` supports `SEEK_SET`, `SEEK_CUR`, and `SEEK_END`. It returns
 `false` when the requested position is outside the logical stream.
 
+### Memory use
+
+Opening a file loads the allocation tables and directory metadata and
+validates the root sector chain. Stream contents are read only on request.
+
+Two caches are bounded per parser:
+
+- Streams below 4096 bytes share a mini-stream cache, filled on demand in
+  64 KiB blocks and limited to 1 MiB.
+- Resolved sector chains are cached up to 1,024 chains and 32,768 sectors. The
+  chain being read is exempt, so one very long chain can exceed the limit
+  while it is in use.
+
+Neither limit bounds total parser memory: the allocation tables themselves
+scale with the file size.
+
 ### Existing PHP resource
 
 ```php
@@ -127,20 +129,38 @@ $file = CompoundFile::fromResource($handle);
 The resource must be seekable. Ownership remains with the caller, so the
 library does not close it.
 
-For deterministic handle release in long-running processes, call
-`$file->close()` when the parser is no longer needed. It closes resources opened
-by `CompoundFile::open()` but never closes a resource supplied by the caller.
-The parser and streams created from it must not be used afterward. On Windows,
-close any other readers before atomically replacing the same file.
+### Closing a file
 
-`$file->release()` is the deferred form: streams that are already open stay
-readable, and the parser closes when the last of them is destroyed. Only
-`Stream` objects keep a released parser open: a writer made by
-`CompoundFileWriter::fromCompoundFile()` does not, so release the parser after
-saving. Use `release()` to hand a stream to a caller that never sees the
-parser:
+Directory entries reference the parser, so an abandoned parser is reclaimed
+only by PHP's cycle collector. In a long-running process, close it yourself.
+There are two ways:
+
+| Method | When the file closes | Streams already open |
+| --- | --- | --- |
+| `close()` | At once | Stop working |
+| `release()` | When the last open stream is destroyed, or at once if there is none | Stay readable |
+
+Closing drops the caches. Neither method closes a resource supplied by the
+caller.
+
+Use `close()` when you are done with the file, and always before replacing or
+deleting it on Windows:
 
 ```php
+$file = CompoundFile::open('document.doc');
+try {
+    $contents = $file->getStreamContents('WordDocument');
+} finally {
+    $file->close();
+}
+```
+
+Use `release()` to hand a stream to a caller that never sees the parser:
+
+```php
+use DK\CompoundFile\CompoundFile;
+use DK\CompoundFile\Stream;
+
 function wordDocument(string $path): Stream
 {
     $file = CompoundFile::open($path);
@@ -150,6 +170,10 @@ function wordDocument(string $path): Stream
     return $stream;
 }
 ```
+
+Only `Stream` objects keep a released parser open. A writer made by
+`CompoundFileWriter::fromCompoundFile()` does not, so release the parser after
+saving.
 
 ## Writing compound files
 
@@ -261,7 +285,9 @@ $writer->setTimestamps(
 );
 ```
 
-Compound files store timestamps as Windows FILETIME. Property set streams such
+Compound files store timestamps as Windows FILETIME, which covers 1601-01-01
+to 30828-09-14 UTC in 100-nanosecond steps. A date outside that range throws
+`CfbfException`. Property set streams such
 as `\x05SummaryInformation` use the same encoding for their `VT_FILETIME`
 values, so `FileTime` is public for code that parses those payloads:
 
@@ -430,9 +456,16 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 ## Error handling
 
 Malformed or unsupported files throw
-`DK\CompoundFile\Exception\CfbfException`. This includes invalid signatures,
-truncated data, out-of-range sector references, invalid directory trees, and
-cyclic allocation or directory chains.
+`DK\CompoundFile\Exception\CfbfException`. This includes:
+
+- an invalid signature or a byte order other than little-endian;
+- truncated data and out-of-range sector references;
+- invalid directory trees and cyclic allocation or directory chains;
+- entry names that are empty, not null-terminated, not valid UTF-16, or that
+  contain a null or reserved character;
+- reading from a parser that has been closed.
+
+The parser is strict: it rejects such a file instead of repairing it.
 
 Invalid caller arguments throw `InvalidArgumentException`. Wrapper open
 failures follow PHP conventions and return `false` from `fopen()`.
@@ -475,8 +508,8 @@ Run the optional writer interoperability test through LibreOffice with:
 SOFFICE=/path/to/soffice vendor/bin/phpunit tests/WriterInteropTest.php
 ```
 
-Tests run on PHP 8.1 through PHP 8.5 and cover allocation chains, both byte
-orders, seeking, Unicode names, malformed files, wrapper streams/directories,
+Tests run on PHP 8.1 through PHP 8.5 and cover allocation chains,
+seeking, Unicode names, malformed files, wrapper streams/directories,
 metadata, writer round-trips, stream-size boundaries, multi-sector FAT and
 mini-FAT tables, DIFAT output, nested directory trees, resource I/O, atomic
 replacement, and rewriting a real LibreOffice document without changing its
