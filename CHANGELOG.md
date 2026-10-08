@@ -6,6 +6,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `CompoundFileWriter::close()` releases the source file that `open()` holds
+  for lazy stream copying. Without it the handle stayed open until PHP's cycle
+  collector ran, so a worker opening many files could run out of descriptors.
+  It never closes a resource or parser supplied by the caller.
+
 ## [0.3.1] - 2026-09-23
 
 ### Changed

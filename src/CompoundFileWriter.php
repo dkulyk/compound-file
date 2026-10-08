@@ -76,7 +76,11 @@ final class CompoundFileWriter
      */
     public static function fromResource($resource): self
     {
-        return self::fromCompoundFile(CompoundFile::fromResource($resource));
+        $file = CompoundFile::fromResource($resource);
+        $writer = self::fromCompoundFile($file);
+        $writer->ownedSource = $file;
+
+        return $writer;
     }
 
     /** Imports an already parsed compound file without eagerly copying its streams. */
@@ -89,6 +93,19 @@ final class CompoundFileWriter
         }
 
         return $writer;
+    }
+
+    /**
+     * Releases the source that open() or fromResource() parsed.
+     *
+     * It closes the file handle open() holds; a resource supplied by the caller
+     * and a parser passed to fromCompoundFile() stay open. Imported streams that
+     * were not replaced can no longer be saved afterward. Safe to call repeatedly.
+     */
+    public function close(): void
+    {
+        $this->ownedSource?->close();
+        $this->ownedSource = null;
     }
 
     /** Returns true when a stream or storage exists at the supplied path. */
