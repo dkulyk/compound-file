@@ -134,8 +134,11 @@ The parser and streams created from it must not be used afterward. On Windows,
 close any other readers before atomically replacing the same file.
 
 `$file->release()` is the deferred form: streams that are already open stay
-readable, and the parser closes when the last of them is destroyed. Use it to
-hand a stream to a caller that never sees the parser:
+readable, and the parser closes when the last of them is destroyed. Only
+`Stream` objects keep a released parser open: a writer made by
+`CompoundFileWriter::fromCompoundFile()` does not, so release the parser after
+saving. Use `release()` to hand a stream to a caller that never sees the
+parser:
 
 ```php
 function wordDocument(string $path): Stream
