@@ -24,13 +24,22 @@ composer check
 `composer check` validates Composer metadata, PHP syntax, formatting, PHPStan,
 and PHPUnit. Apply formatting with `composer format`.
 
-Run the reader benchmark against the bundled fixture or a representative local
-file:
+Run the reader benchmark against the bundled fixture or representative local
+files:
 
 ```bash
 composer benchmark
-composer benchmark -- /path/to/document.xls
+composer benchmark -- /path/to/document.doc /path/to/workbook.xls
+php tools/benchmark.php --json /path/to/document.doc
 ```
+
+It measures median open time, first extraction, random access, warm extraction
+throughput for the largest stream, and full writer rewrite throughput.
+
+The scheduled workflow downloads a checksum-verified corpus pinned to a
+specific LibreOffice revision. `tools/download-benchmark-corpus.sh` reproduces
+the same corpus locally without committing large binary fixtures to this
+repository.
 
 Run the synthetic time and memory scenarios with:
 
@@ -68,6 +77,25 @@ Run the optional LibreOffice writer interoperability test with:
 ```bash
 SOFFICE=/path/to/soffice vendor/bin/phpunit tests/WriterInteropTest.php
 ```
+
+GitHub Actions also runs two weekly, manually dispatchable checks: the
+LibreOffice writer interoperability test and a reader benchmark whose output is
+retained as a build artifact. Benchmarks are observational and do not fail a
+build on noisy timing differences.
+
+Tests run on PHP 8.1 through PHP 8.5.
+
+### Integration fixture
+
+The Word 97 fixture `tests/fixtures/README.doc` is generated from the README
+through LibreOffice's CommonMark importer:
+
+```bash
+composer fixtures
+```
+
+The command uses `soffice` from `PATH`. Set `SOFFICE=/custom/path/soffice` to
+select another LibreOffice binary.
 
 ## Pull requests
 
