@@ -10,10 +10,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Directory entry names are validated instead of repaired. A name whose last
   two bytes are not a null terminator, that is not valid UTF-16 (an unpaired
-  surrogate), or that contains a null character is rejected with a
-  `CfbfException`. Before, the terminator bytes were dropped unchecked, an
-  unpaired surrogate became "?", and an embedded null was kept, so two
-  different on-disk names could read back as the same path.
+  surrogate), that contains a null character, or that is empty outside the
+  root entry is rejected with a `CfbfException`. Before, the terminator bytes
+  were dropped unchecked, an unpaired surrogate became "?", and an embedded
+  null was kept, so two different on-disk names could read back as the same
+  path; a stream with an empty name took the root's path and was dropped when
+  the file was rewritten.
 
 ### Removed
 

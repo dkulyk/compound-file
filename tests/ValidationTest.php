@@ -51,6 +51,7 @@ final class ValidationTest extends TestCase
     {
         // The fixture stream is named "Data": four UTF-16LE units and a terminator.
         yield 'non-null terminator' => [8, "X\0", 'is not null-terminated'];
+        yield 'half-null terminator' => [8, "\0\x01", 'is not null-terminated'];
         yield 'unpaired high surrogate' => [2, "\x00\xD8", 'is not valid UTF-16'];
         yield 'unpaired low surrogate' => [2, "\x00\xDC", 'is not valid UTF-16'];
         yield 'embedded null' => [2, "\0\0", 'contains a null character'];
@@ -63,6 +64,17 @@ final class ValidationTest extends TestCase
 
         $this->expectException(CfbfException::class);
         $this->expectExceptionMessage($message);
+        $this->parse($bytes);
+    }
+
+    public function testRejectsEmptyNamesOutsideTheRoot(): void
+    {
+        // An empty name would give the stream the root's path and drop it on rewrite.
+        $bytes = substr_replace(FixtureBuilder::regular(), pack('v', 2), self::DIRECTORY_SECOND_ENTRY + 64, 2);
+        $bytes = substr_replace($bytes, "\0\0", self::DIRECTORY_SECOND_ENTRY, 2);
+
+        $this->expectException(CfbfException::class);
+        $this->expectExceptionMessage('Directory entry name is empty.');
         $this->parse($bytes);
     }
 

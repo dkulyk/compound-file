@@ -376,6 +376,9 @@ final class CompoundFile
             if ($nameLength < 2 || $nameLength > 64 || $nameLength % 2 !== 0) {
                 throw new CfbfException('Invalid directory entry name length.');
             }
+            if ($nameLength === 2 && $type !== DirectoryEntry::TYPE_ROOT) {
+                throw new CfbfException('Directory entry name is empty.');
+            }
             $encoded = substr($bytes, $offset, $nameLength - 2);
             if (substr($bytes, $offset + $nameLength - 2, 2) !== "\0\0") {
                 throw new CfbfException('Directory entry name is not null-terminated.');
