@@ -390,7 +390,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 | --- | --- |
 | `decode(string $bytes): ?DateTimeImmutable` | Decode eight little-endian FILETIME bytes. |
 | `encode(?DateTimeInterface $time): string` | Encode eight little-endian FILETIME bytes. |
-| `ticks(int $low, int $high): ?int` | Combine the halves of a FILETIME into a tick count. |
+| `ticks(int $low, int $high): ?int` | Combine the unsigned 32-bit halves of a FILETIME into a tick count. |
 | `fromTicks(?int $ticks): ?DateTimeImmutable` | Convert a tick count to UTC. |
 | `toTicks(DateTimeInterface $time): int` | Convert a date to a tick count. |
 
