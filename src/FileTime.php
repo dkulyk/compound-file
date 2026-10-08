@@ -110,7 +110,7 @@ final class FileTime
             || ($seconds === $maximum && $fraction > PHP_INT_MAX % self::TICKS_PER_SECOND)
         ) {
             throw new CfbfException(
-                sprintf('FILETIME cannot represent "%s"; the range is 1601-01-01 to 30828-09-14 UTC.', $time->format('c'))
+                sprintf('FILETIME cannot represent "%s"; the range is 1601-01-01 to 30828-09-14 UTC.', $time->format('Y-m-d\TH:i:s.uP'))
             );
         }
 
