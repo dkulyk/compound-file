@@ -14,6 +14,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   opening many files could run out of descriptors. It never closes a resource
   or parser supplied by the caller.
 
+### Fixed
+
+- `FileTime::toTicks()` and `encode()` raised a `TypeError` for a date in the
+  last representable second, 30828-09-14 02:48:05 UTC, once its fraction went
+  past .477580. They now throw `CfbfException`, like any other date outside
+  the range.
+- `FileTime::ticks()` throws `InvalidArgumentException` when a half is not an
+  unsigned 32-bit value. It used to return a meaningless count, negative for a
+  negative half.
+
 ## [0.3.1] - 2026-09-23
 
 ### Changed
