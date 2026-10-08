@@ -181,6 +181,24 @@ An existing seekable resource can be imported with
 `CompoundFileWriter::fromResource($resource)`. The caller retains ownership and
 must keep the source open until saving finishes.
 
+A writer made by `open()` keeps the source file open so it can copy streams
+when saving. The handle is released when the writer is destroyed; call
+`close()` to release it earlier, for example before replacing or deleting the
+source file:
+
+```php
+$writer = CompoundFileWriter::open('template.doc');
+try {
+    $writer->setStreamContents('WordDocument', $wordDocument);
+    $writer->save('result.doc');
+} finally {
+    $writer->close();
+}
+```
+
+`close()` never closes a resource or parser supplied by the caller. After it,
+saving fails for streams that still come from the source.
+
 Saving to the original path is supported. Filesystem saves are flushed and
 synchronized to storage, written to a temporary file in the destination
 directory, and then replaced atomically. Existing POSIX permissions are
@@ -378,6 +396,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 | `setTimestamps(string $path, ?DateTimeInterface $created, ?DateTimeInterface $modified): self` | Set FILETIME metadata. |
 | `save(string $path): void` | Atomically save to a filesystem path. |
 | `saveToResource(resource $resource): void` | Save to an open seekable resource. |
+| `close(): void` | Release the source opened by `open()` or parsed by `fromResource()`. |
 
 ### `FileTime`
 
@@ -385,7 +404,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 | --- | --- |
 | `decode(string $bytes): ?DateTimeImmutable` | Decode eight little-endian FILETIME bytes. |
 | `encode(?DateTimeInterface $time): string` | Encode eight little-endian FILETIME bytes. |
-| `ticks(int $low, int $high): ?int` | Combine the halves of a FILETIME into a tick count. |
+| `ticks(int $low, int $high): ?int` | Combine the unsigned 32-bit halves of a FILETIME into a tick count. |
 | `fromTicks(?int $ticks): ?DateTimeImmutable` | Convert a tick count to UTC. |
 | `toTicks(DateTimeInterface $time): int` | Convert a date to a tick count. |
 
