@@ -7,25 +7,22 @@ namespace DK\CompoundFile\Tests;
 use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\DirectoryEntry;
-use DK\CompoundFile\Header;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class RoundTripPropertyTest extends TestCase
 {
-    /** @return iterable<string, array{int, string}> */
+    /** @return iterable<string, array{int}> */
     public static function formatProvider(): iterable
     {
-        yield 'v3 little-endian' => [3, Header::LITTLE_ENDIAN];
-        yield 'v3 big-endian' => [3, Header::BIG_ENDIAN];
-        yield 'v4 little-endian' => [4, Header::LITTLE_ENDIAN];
-        yield 'v4 big-endian' => [4, Header::BIG_ENDIAN];
+        yield 'v3' => [3];
+        yield 'v4' => [4];
     }
 
     #[DataProvider('formatProvider')]
-    public function testGeneratedTreesSurviveRepeatedRoundTrips(int $version, string $byteOrder): void
+    public function testGeneratedTreesSurviveRepeatedRoundTrips(int $version): void
     {
-        $writer = CompoundFileWriter::create($version, $byteOrder);
+        $writer = CompoundFileWriter::create($version);
         $expected = [];
         foreach (['A', 'A/Nested', 'Unicode/Сховище'] as $storage) {
             $writer->createStorage($storage);
@@ -40,7 +37,7 @@ final class RoundTripPropertyTest extends TestCase
                 default => 'Unicode/Сховище/',
             };
             $path = $parent.'Stream-'.$index;
-            $contents = $this->deterministicBytes($size, 'seed-'.$version.'-'.$byteOrder.'-'.$index);
+            $contents = $this->deterministicBytes($size, 'seed-'.$version.'-'.$index);
             $writer->setStreamContents($path, $contents);
             $expected[$path] = hash('sha256', $contents);
         }

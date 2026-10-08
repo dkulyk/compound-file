@@ -19,7 +19,6 @@ final class MetadataTest extends TestCase
 
         self::assertSame(3, $header->getMajorVersion());
         self::assertSame(0x003E, $header->getMinorVersion());
-        self::assertSame(Header::LITTLE_ENDIAN, $header->getByteOrder());
         self::assertSame(512, $header->getSectorSize());
         self::assertSame(64, $header->getMiniSectorSize());
         self::assertTrue($header->hasMiniFat());

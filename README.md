@@ -16,9 +16,9 @@ access to the storages and streams inside legacy Microsoft Office files such as
 - CFBF version 3 and version 4
 - FAT, DIFAT, and mini-FAT chains
 - 512-byte and 4096-byte sectors
-- Little-endian and big-endian files
+- Little-endian files, the only byte order MS-CFB allows
 - 64-bit stream sizes
-- UTF-16LE/BE names converted to UTF-8
+- UTF-16LE names converted to UTF-8
 - Nested storages and case-insensitive path lookup
 - Incremental and seekable stream reading
 - Creation and full-file rewriting of compound files
@@ -138,11 +138,10 @@ close any other readers before atomically replacing the same file.
 ### Creating a file
 
 `CompoundFileWriter::create()` creates a version 3 file with 512-byte sectors
-and little-endian integers by default:
+by default:
 
 ```php
 use DK\CompoundFile\CompoundFileWriter;
-use DK\CompoundFile\Header;
 
 $writer = CompoundFileWriter::create();
 $writer->setStreamContents('Data', $contents);
@@ -150,9 +149,6 @@ $writer->save('container.ole');
 
 // Version 4 uses 4096-byte sectors.
 $version4 = CompoundFileWriter::create(4);
-
-// Big-endian output is supported for compatible consumers.
-$bigEndian = CompoundFileWriter::create(3, Header::BIG_ENDIAN);
 ```
 
 `createStorage()` creates all missing parents. A stream's parent must already
@@ -288,11 +284,10 @@ $header = $file->getHeader();
 
 echo $header->getMajorVersion();
 echo $header->getSectorSize();
-echo $header->getByteOrder();
 echo $header->getDirectorySectorCount();
 ```
 
-`Header` exposes the CFBF version, byte order, sector shifts and sizes,
+`Header` exposes the CFBF version, sector shifts and sizes,
 transaction signature, mini-stream cutoff, and declared FAT, mini-FAT, and
 DIFAT locations and counts. Version 4 headers also expose the declared
 directory-sector count.
@@ -368,7 +363,7 @@ Provides `register()`, `url()`, and `directoryUrl()`.
 
 | Method | Description |
 | --- | --- |
-| `create(int $version = 3, string $byteOrder = Header::LITTLE_ENDIAN): self` | Create an empty writer model. |
+| `create(int $version = 3): self` | Create an empty writer model. |
 | `open(string $path): self` | Import an existing compound file lazily. |
 | `fromResource(resource $resource): self` | Import a compound file from an existing resource. |
 | `fromCompoundFile(CompoundFile $file): self` | Import an existing parsed container. |

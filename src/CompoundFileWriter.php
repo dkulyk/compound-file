@@ -30,32 +30,24 @@ final class CompoundFileWriter
     private const COPY_BLOCK_SIZE = 1_048_576;
 
     private int $majorVersion;
-    private bool $littleEndian;
     /** @var array<string, WritableEntry> */
     private array $entries = [];
     private ?CompoundFile $ownedSource = null;
     private ?string $sourcePath = null;
 
-    private function __construct(int $majorVersion, bool $littleEndian)
+    private function __construct(int $majorVersion)
     {
         if ($majorVersion !== 3 && $majorVersion !== 4) {
             throw new \InvalidArgumentException('CFBF major version must be 3 or 4.');
         }
         $this->majorVersion = $majorVersion;
-        $this->littleEndian = $littleEndian;
         $this->entries[''] = WritableEntry::root();
     }
 
     /** Creates an empty compound file model. */
-    public static function create(
-        int $majorVersion = 3,
-        string $byteOrder = Header::LITTLE_ENDIAN,
-    ): self {
-        if ($byteOrder !== Header::LITTLE_ENDIAN && $byteOrder !== Header::BIG_ENDIAN) {
-            throw new \InvalidArgumentException('Byte order must be Header::LITTLE_ENDIAN or Header::BIG_ENDIAN.');
-        }
-
-        return new self($majorVersion, $byteOrder === Header::LITTLE_ENDIAN);
+    public static function create(int $majorVersion = 3): self
+    {
+        return new self($majorVersion);
     }
 
     /** Opens an existing compound file as a mutable writer model. */
@@ -82,7 +74,7 @@ final class CompoundFileWriter
     /** Imports an already parsed compound file without eagerly copying its streams. */
     public static function fromCompoundFile(CompoundFile $file): self
     {
-        $writer = new self($file->getMajorVersion(), $file->getHeader()->isLittleEndian());
+        $writer = new self($file->getMajorVersion());
         $writer->entries = [];
         foreach ($file->getEntries() as $entry) {
             $writer->entries[$writer->normalizePath($entry->getPath())] = WritableEntry::imported($file, $entry);
@@ -479,11 +471,10 @@ final class CompoundFileWriter
     /** Packs the allocation table entries of a chain of consecutive sectors. */
     private function packChain(int $start, int $count, string $endEntry): string
     {
-        $format = $this->littleEndian ? 'V*' : 'N*';
         $packed = '';
         // Chunks keep the range() array small however long the chain is.
         for ($next = $start + 1, $end = $start + $count; $next < $end; $next += 1024) {
-            $packed .= pack($format, ...range($next, min($next + 1023, $end - 1)));
+            $packed .= pack('V*', ...range($next, min($next + 1023, $end - 1)));
         }
 
         return $packed.$endEntry;
@@ -502,7 +493,7 @@ final class CompoundFileWriter
     ): string {
         $header = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1".str_repeat("\0", 16);
         $header .= $this->u16(0x003E).$this->u16($this->majorVersion);
-        $header .= $this->littleEndian ? "\xFE\xFF" : "\xFF\xFE";
+        $header .= "\xFE\xFF";
         $header .= $this->u16($sectorSize === 512 ? 9 : 12).$this->u16(6).str_repeat("\0", 6);
         $header .= $this->u32($this->majorVersion === 4 ? $directorySectorCount : 0);
         $header .= $this->u32(count($fatSectors)).$this->u32($directoryStart).$this->u32(0);
@@ -520,11 +511,7 @@ final class CompoundFileWriter
      */
     private function directoryEntry(WritableEntry $entry, WritableTreeNode $tree, array $location): string
     {
-        $encodedName = mb_convert_encoding(
-            $entry->name,
-            $this->littleEndian ? 'UTF-16LE' : 'UTF-16BE',
-            'UTF-8',
-        )."\0\0";
+        $encodedName = mb_convert_encoding($entry->name, 'UTF-16LE', 'UTF-8')."\0\0";
         if (strlen($encodedName) > 64) {
             throw new CfbfException(sprintf('Directory entry name "%s" exceeds 31 UTF-16 code units.', $entry->name));
         }
@@ -667,12 +654,12 @@ final class CompoundFileWriter
 
     private function u16(int $value): string
     {
-        return pack($this->littleEndian ? 'v' : 'n', $value);
+        return pack('v', $value);
     }
 
     private function u32(int $value): string
     {
-        return pack($this->littleEndian ? 'V' : 'N', $value);
+        return pack('V', $value);
     }
 
     /** @param list<int> $values */
@@ -682,7 +669,7 @@ final class CompoundFileWriter
             return '';
         }
 
-        return pack(($this->littleEndian ? 'V' : 'N').'*', ...$values);
+        return pack('V*', ...$values);
     }
 
     /** @param resource $resource */

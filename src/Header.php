@@ -7,13 +7,9 @@ namespace DK\CompoundFile;
 /** Immutable representation of the parsed CFBF header. */
 final class Header
 {
-    public const LITTLE_ENDIAN = 'little';
-    public const BIG_ENDIAN = 'big';
-
     public function __construct(
         private int $minorVersion,
         private int $majorVersion,
-        private string $byteOrder,
         private int $sectorShift,
         private int $miniSectorShift,
         private int $fatSectorCount,
@@ -35,18 +31,6 @@ final class Header
     public function getMajorVersion(): int
     {
         return $this->majorVersion;
-    }
-    public function getByteOrder(): string
-    {
-        return $this->byteOrder;
-    }
-    public function isLittleEndian(): bool
-    {
-        return $this->byteOrder === self::LITTLE_ENDIAN;
-    }
-    public function isBigEndian(): bool
-    {
-        return $this->byteOrder === self::BIG_ENDIAN;
     }
     public function getSectorShift(): int
     {

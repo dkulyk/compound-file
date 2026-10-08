@@ -6,6 +6,20 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking:** big-endian support. MS-CFB requires the byte-order field to be
+  0xFFFE, little-endian, and no known producer writes anything else, so the
+  big-endian variant was an extension that only this library could read.
+  `CompoundFile` now rejects such a file with "Invalid CFBF byte-order marker;
+  only little-endian files are supported.", and `CompoundFileWriter::create()`
+  no longer takes a byte order. `Header::LITTLE_ENDIAN`, `Header::BIG_ENDIAN`,
+  `Header::getByteOrder()`, `Header::isLittleEndian()` and
+  `Header::isBigEndian()` are gone. To convert a big-endian file written by an
+  earlier release, read it with 0.3.x and copy its storages and streams into
+  a writer from `CompoundFileWriter::create()`; `CompoundFileWriter::open()`
+  in 0.3.x keeps the source byte order and does not convert.
+
 ## [0.3.1] - 2026-09-23
 
 ### Changed

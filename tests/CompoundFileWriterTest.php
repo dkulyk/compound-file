@@ -79,27 +79,6 @@ final class CompoundFileWriterTest extends TestCase
         self::assertSame(str_repeat('r', 12_345), $file->getStreamContents('Regular'));
     }
 
-    public function testWritesBigEndianContainer(): void
-    {
-        $writer = CompoundFileWriter::create(3, Header::BIG_ENDIAN);
-        $writer->createStorage('Сховище');
-        $writer->setStreamContents('Малий', str_repeat('m', 333));
-        $writer->setStreamContents('Сховище/Потік', str_repeat('BE', 2500));
-
-        $created = new \DateTimeImmutable('2026-09-03 12:34:56.123456', new \DateTimeZone('UTC'));
-        $writer->setTimestamps('Малий', $created, null);
-
-        $file = $this->roundTrip($writer);
-        self::assertTrue($file->getHeader()->isBigEndian());
-        self::assertSame(str_repeat('m', 333), $file->getStreamContents('Малий'));
-        self::assertSame(str_repeat('BE', 2500), $file->getStreamContents('Сховище/Потік'));
-        // FILETIME halves are packed with the container's byte order, not always little-endian.
-        self::assertSame(
-            '2026-09-03 12:34:56.123456',
-            $file->findEntry('Малий')?->getCreationTime()?->format('Y-m-d H:i:s.u')
-        );
-    }
-
     public function testUnicodePathRegistryUsesCfbfCaseFolding(): void
     {
         $writer = CompoundFileWriter::create();
@@ -482,18 +461,11 @@ final class CompoundFileWriterTest extends TestCase
 
     public function testRejectsInvalidWriterConfigurationAndMetadata(): void
     {
-        foreach (
-            [
-                static fn (): CompoundFileWriter => CompoundFileWriter::create(2),
-                static fn (): CompoundFileWriter => CompoundFileWriter::create(3, 'middle'),
-            ] as $operation
-        ) {
-            try {
-                $operation();
-                self::fail('Invalid writer configuration was accepted.');
-            } catch (\InvalidArgumentException $exception) {
-                self::assertNotSame('', $exception->getMessage());
-            }
+        try {
+            CompoundFileWriter::create(2);
+            self::fail('Invalid writer configuration was accepted.');
+        } catch (\InvalidArgumentException $exception) {
+            self::assertNotSame('', $exception->getMessage());
         }
 
         $writer = CompoundFileWriter::create();

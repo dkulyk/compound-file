@@ -23,7 +23,6 @@ final class CompoundFile
 
     private RandomAccessReader $reader;
     private Header $header;
-    private bool $littleEndian;
     private int $majorVersion;
     private int $sectorSize;
     private int $miniSectorSize;
@@ -207,19 +206,13 @@ final class CompoundFile
         if (substr($header, 0, 8) !== "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1") {
             throw new CfbfException('Invalid CFBF signature.');
         }
-        $byteOrder = substr($header, 28, 2);
-        if ($byteOrder === "\xFE\xFF") {
-            $this->littleEndian = true;
-        } elseif ($byteOrder === "\xFF\xFE") {
-            $this->littleEndian = false;
-        } else {
-            throw new CfbfException('Invalid CFBF byte-order marker.');
+        // MS-CFB allows only the little-endian marker, 0xFFFE.
+        if (substr($header, 28, 2) !== "\xFE\xFF") {
+            throw new CfbfException('Invalid CFBF byte-order marker; only little-endian files are supported.');
         }
 
-        $integer16 = $this->littleEndian ? 'v' : 'n';
         $versionFields = unpack(
-            $integer16.'minorVersion/'.$integer16.'majorVersion/x2/'
-            .$integer16.'sectorShift/'.$integer16.'miniSectorShift',
+            'vminorVersion/vmajorVersion/x2/vsectorShift/vminiSectorShift',
             $header,
             24,
         );
@@ -266,7 +259,6 @@ final class CompoundFile
         $this->header = new Header(
             $minorVersion,
             $this->majorVersion,
-            $this->littleEndian ? Header::LITTLE_ENDIAN : Header::BIG_ENDIAN,
             $sectorShift,
             $miniSectorShift,
             $fatCount,
@@ -361,16 +353,8 @@ final class CompoundFile
 
     private function parseDirectory(string $bytes): void
     {
-        $integer16 = $this->littleEndian ? 'v' : 'n';
-        $integer32 = $this->littleEndian ? 'V' : 'N';
-        $format = 'x64/'
-            .$integer16.'nameLength/Ctype/Ccolor/'
-            .$integer32.'leftId/'.$integer32.'rightId/'.$integer32.'childId/'
-            .'a16classId/'
-            .$integer32.'stateBits/'
-            .$integer32.'creationLow/'.$integer32.'creationHigh/'
-            .$integer32.'modifiedLow/'.$integer32.'modifiedHigh/'
-            .$integer32.'startSector/'.$integer32.'sizeLow/'.$integer32.'sizeHigh';
+        $format = 'x64/vnameLength/Ctype/Ccolor/VleftId/VrightId/VchildId/a16classId/VstateBits/'
+            .'VcreationLow/VcreationHigh/VmodifiedLow/VmodifiedHigh/VstartSector/VsizeLow/VsizeHigh';
         $length = strlen($bytes);
 
         for ($offset = 0, $id = 0; $offset + 128 <= $length; $offset += 128, $id++) {
@@ -393,11 +377,7 @@ final class CompoundFile
                 throw new CfbfException('Invalid directory entry name length.');
             }
             $encoded = substr($bytes, $offset, $nameLength - 2);
-            $name = mb_convert_encoding(
-                $encoded,
-                'UTF-8',
-                $this->littleEndian ? 'UTF-16LE' : 'UTF-16BE'
-            );
+            $name = mb_convert_encoding($encoded, 'UTF-8', 'UTF-16LE');
             if (strpbrk($name, '/\\:!') !== false) {
                 throw new CfbfException(sprintf('Directory entry name "%s" contains a reserved character.', $name));
             }
@@ -622,10 +602,7 @@ final class CompoundFile
 
         // unpack() numbers from 1. Decoding a leading dummy word and shifting it off
         // renumbers the array in place; array_values() would copy the whole table.
-        $values = unpack(
-            $this->littleEndian ? 'V*' : 'N*',
-            "\0\0\0\0".substr($bytes, 0, $usable),
-        );
+        $values = unpack('V*', "\0\0\0\0".substr($bytes, 0, $usable));
         if ($values !== false) {
             array_shift($values);
         }
@@ -637,7 +614,7 @@ final class CompoundFile
     }
     private function u16(string $bytes, int $offset): int
     {
-        $value = unpack($this->littleEndian ? 'v' : 'n', substr($bytes, $offset, 2));
+        $value = unpack('v', substr($bytes, $offset, 2));
         if ($value === false) {
             throw new CfbfException('Cannot decode a 16-bit integer.');
         }
@@ -645,7 +622,7 @@ final class CompoundFile
     }
     private function u32(string $bytes, int $offset): int
     {
-        $value = unpack($this->littleEndian ? 'V' : 'N', substr($bytes, $offset, 4));
+        $value = unpack('V', substr($bytes, $offset, 4));
         if ($value === false) {
             throw new CfbfException('Cannot decode a 32-bit integer.');
         }
