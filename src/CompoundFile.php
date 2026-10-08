@@ -376,8 +376,20 @@ final class CompoundFile
             if ($nameLength < 2 || $nameLength > 64 || $nameLength % 2 !== 0) {
                 throw new CfbfException('Invalid directory entry name length.');
             }
+            if ($nameLength === 2 && $type !== DirectoryEntry::TYPE_ROOT) {
+                throw new CfbfException('Directory entry name is empty.');
+            }
             $encoded = substr($bytes, $offset, $nameLength - 2);
+            if (substr($bytes, $offset + $nameLength - 2, 2) !== "\0\0") {
+                throw new CfbfException('Directory entry name is not null-terminated.');
+            }
+            if (!mb_check_encoding($encoded, 'UTF-16LE')) {
+                throw new CfbfException('Directory entry name is not valid UTF-16.');
+            }
             $name = mb_convert_encoding($encoded, 'UTF-8', 'UTF-16LE');
+            if (str_contains($name, "\0")) {
+                throw new CfbfException('Directory entry name contains a null character.');
+            }
             if (strpbrk($name, '/\\:!') !== false) {
                 throw new CfbfException(sprintf('Directory entry name "%s" contains a reserved character.', $name));
             }
