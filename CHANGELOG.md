@@ -6,6 +6,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The Composer package no longer ships tests, development tools, CI
+  configuration and contributor files. It contains `src/`, `docs/`, the
+  README, the changelog, the licence and the security policy, and the archive
+  is about half the size.
+
 ## [0.4.0] - 2026-10-09
 
 ### Added
