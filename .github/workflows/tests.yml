@@ -20,6 +20,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with: {php-version: '8.5', coverage: none}
       - run: composer update --prefer-dist --no-interaction
@@ -39,6 +40,7 @@ jobs:
             php: '8.3'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with: {php-version: '${{ matrix.php }}', coverage: none}
       - run: composer update --prefer-dist --no-interaction
@@ -52,6 +54,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {persist-credentials: false}
       - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with: {php-version: '8.1', coverage: none}
       - run: composer update --prefer-lowest --prefer-dist --no-interaction
