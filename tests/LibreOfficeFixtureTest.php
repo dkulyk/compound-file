@@ -10,7 +10,7 @@ use PHPUnit\Framework\TestCase;
 
 final class LibreOfficeFixtureTest extends TestCase
 {
-    private const FIXTURE = __DIR__.'/fixtures/README.doc';
+    private const FIXTURE = __DIR__ . '/fixtures/README.doc';
 
     public function testParsesDocumentCreatedByLibreOffice(): void
     {

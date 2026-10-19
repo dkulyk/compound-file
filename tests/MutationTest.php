@@ -83,7 +83,7 @@ final class MutationTest extends TestCase
         }
 
         foreach ([0, 1, 7, 8, 27, 28, 63, 127, 511, 512, 513, $length - 1, $length] as $size) {
-            $mutations['truncate-'.$size] = substr($bytes, 0, $size);
+            $mutations['truncate-' . $size] = substr($bytes, 0, $size);
         }
 
         return $mutations;

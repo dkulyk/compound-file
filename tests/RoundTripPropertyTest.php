@@ -6,7 +6,6 @@ namespace DK\CompoundFile\Tests;
 
 use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
-use DK\CompoundFile\DirectoryEntry;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -36,8 +35,8 @@ final class RoundTripPropertyTest extends TestCase
                 2 => 'A/Nested/',
                 default => 'Unicode/Сховище/',
             };
-            $path = $parent.'Stream-'.$index;
-            $contents = $this->deterministicBytes($size, 'seed-'.$version.'-'.$index);
+            $path = $parent . 'Stream-' . $index;
+            $contents = $this->deterministicBytes($size, 'seed-' . $version . '-' . $index);
             $writer->setStreamContents($path, $contents);
             $expected[$path] = hash('sha256', $contents);
         }
@@ -71,7 +70,7 @@ final class RoundTripPropertyTest extends TestCase
     {
         $contents = '';
         for ($counter = 0; strlen($contents) < $size; $counter++) {
-            $contents .= hash('sha256', $seed.'-'.$counter, true);
+            $contents .= hash('sha256', $seed . '-' . $counter, true);
         }
 
         return substr($contents, 0, $size);

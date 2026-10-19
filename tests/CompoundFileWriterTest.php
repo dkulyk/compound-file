@@ -28,7 +28,7 @@ final class CompoundFileWriterTest extends TestCase
         $writer = CompoundFileWriter::create();
         $expected = [];
         foreach ([0, 1, 63, 64, 65, 511, 512, 4095, 4096, 4097, 8193] as $size) {
-            $name = 'Size'.$size;
+            $name = 'Size' . $size;
             $contents = $this->contents($size);
             $expected[$name] = $contents;
             $writer->setStreamContents($name, $contents);
@@ -50,7 +50,7 @@ final class CompoundFileWriterTest extends TestCase
         $writer->setStreamContents("\u{E000}", 'private-use');
         $writer->setStreamContents('😀', 'supplementary');
         for ($index = 0; $index < 80; $index++) {
-            $writer->setStreamContents(sprintf('Entry %02d', $index), 'value-'.$index);
+            $writer->setStreamContents(sprintf('Entry %02d', $index), 'value-' . $index);
         }
 
         $file = $this->roundTrip($writer);
@@ -60,7 +60,7 @@ final class CompoundFileWriterTest extends TestCase
         self::assertSame('supplementary', $file->getStreamContents('😀'));
         $this->assertValidDirectoryTrees($file);
         for ($index = 0; $index < 80; $index++) {
-            self::assertSame('value-'.$index, $file->getStreamContents(sprintf('Entry %02d', $index)));
+            self::assertSame('value-' . $index, $file->getStreamContents(sprintf('Entry %02d', $index)));
         }
     }
 
@@ -91,13 +91,13 @@ final class CompoundFileWriterTest extends TestCase
     {
         $writer = CompoundFileWriter::create();
         for ($index = 0; $index < 5; $index++) {
-            $writer->setStreamContents('Mini'.$index, str_repeat(chr(65 + $index), 3000));
+            $writer->setStreamContents('Mini' . $index, str_repeat(chr(65 + $index), 3000));
         }
 
         $file = $this->roundTrip($writer);
         self::assertGreaterThan(1, $file->getHeader()->getMiniFatSectorCount());
         for ($index = 0; $index < 5; $index++) {
-            self::assertSame(str_repeat(chr(65 + $index), 3000), $file->getStreamContents('Mini'.$index));
+            self::assertSame(str_repeat(chr(65 + $index), 3000), $file->getStreamContents('Mini' . $index));
         }
     }
 
@@ -330,9 +330,9 @@ final class CompoundFileWriterTest extends TestCase
         if (PHP_OS_FAMILY === 'Windows') {
             self::markTestSkipped('POSIX permissions are not available on Windows.');
         }
-        $directory = sys_get_temp_dir().'/compound-permissions-'.bin2hex(random_bytes(6));
+        $directory = sys_get_temp_dir() . '/compound-permissions-' . bin2hex(random_bytes(6));
         self::assertTrue(mkdir($directory));
-        $path = $directory.'/new.ole';
+        $path = $directory . '/new.ole';
         $previousUmask = umask(0o027);
         try {
             $writer = CompoundFileWriter::create();
@@ -376,10 +376,10 @@ final class CompoundFileWriterTest extends TestCase
 
     public function testFailedAtomicReplacementRemovesTemporaryFile(): void
     {
-        $directory = sys_get_temp_dir().'/compound-target-'.bin2hex(random_bytes(6));
+        $directory = sys_get_temp_dir() . '/compound-target-' . bin2hex(random_bytes(6));
         self::assertTrue(mkdir($directory));
         try {
-            $before = glob(sys_get_temp_dir().'/.compound-file-*');
+            $before = glob(sys_get_temp_dir() . '/.compound-file-*');
             self::assertIsArray($before);
             $writer = CompoundFileWriter::create();
             $writer->setStreamContents('Data', 'value');
@@ -389,7 +389,7 @@ final class CompoundFileWriterTest extends TestCase
             } catch (CfbfException $exception) {
                 self::assertStringContainsString('Cannot replace', $exception->getMessage());
             }
-            $after = glob(sys_get_temp_dir().'/.compound-file-*');
+            $after = glob(sys_get_temp_dir() . '/.compound-file-*');
             self::assertIsArray($after);
             self::assertSame($before, $after);
         } finally {
@@ -450,7 +450,7 @@ final class CompoundFileWriterTest extends TestCase
 
     public function testRewritesLibreOfficeFixtureWithoutChangingStreamBytesOrMetadata(): void
     {
-        $source = CompoundFile::open(__DIR__.'/fixtures/README.doc');
+        $source = CompoundFile::open(__DIR__ . '/fixtures/README.doc');
         $file = $this->roundTrip(CompoundFileWriter::fromCompoundFile($source));
 
         $sourceEntries = [];

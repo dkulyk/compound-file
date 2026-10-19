@@ -102,5 +102,4 @@ final class SectorChainCache
             unset($this->entries[$start]);
         }
     }
-
 }

@@ -48,7 +48,7 @@ final class FixtureBuilder
         }
         ksort($sectors);
 
-        return self::header(1, 0, 0xFFFFFFFE, 1).implode('', $sectors);
+        return self::header(1, 0, 0xFFFFFFFE, 1) . implode('', $sectors);
     }
 
     public static function mini(string $name = 'Small'): string
@@ -57,46 +57,48 @@ final class FixtureBuilder
         $directory = self::entry('Root Entry', 5, 0xFFFFFFFF, 0xFFFFFFFF, 1, 2, 512)
             . self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0, strlen($payload))
             . str_repeat("\0", 256);
-        $miniFat = pack('V*', 1, 0xFFFFFFFE).str_repeat("\xFF", 504);
-        $miniStream = str_pad(substr($payload, 0, 64), 64, "\0").str_pad(substr($payload, 64), 64, "\0").str_repeat("\0", 384);
-        return self::header(3, 1, 1, 1).$directory.$miniFat.$miniStream.self::fat([0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFD]);
+        $miniFat = pack('V*', 1, 0xFFFFFFFE) . str_repeat("\xFF", 504);
+        $miniStream = str_pad(substr($payload, 0, 64), 64, "\0") . str_pad(substr($payload, 64), 64, "\0") . str_repeat("\0", 384);
+        return self::header(3, 1, 1, 1) . $directory . $miniFat . $miniStream . self::fat([0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFE,0xFFFFFFFD]);
     }
 
     public static function fragmentedMini(string $name = 'Small'): string
     {
         $payload = str_repeat('fragmented-', 10);
         $directory = self::entry('Root Entry', 5, 0xFFFFFFFF, 0xFFFFFFFF, 1, 2, 512)
-            .self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 1, strlen($payload))
-            .str_repeat("\0", 256);
-        $miniFat = pack('V*', 0xFFFFFFFE, 3, 0xFFFFFFFF, 0xFFFFFFFE).str_repeat("\xFF", 496);
-        $miniStream = str_repeat('unused-', 9).'x'
-            .substr($payload, 0, 64)
-            .str_repeat("\0", 64)
-            .str_pad(substr($payload, 64), 64, "\0")
-            .str_repeat("\0", 256);
+            . self::entry($name, 2, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 1, strlen($payload))
+            . str_repeat("\0", 256);
+        $miniFat = pack('V*', 0xFFFFFFFE, 3, 0xFFFFFFFF, 0xFFFFFFFE) . str_repeat("\xFF", 496);
+        $miniStream = str_repeat('unused-', 9) . 'x'
+            . substr($payload, 0, 64)
+            . str_repeat("\0", 64)
+            . str_pad(substr($payload, 64), 64, "\0")
+            . str_repeat("\0", 256);
 
-        return self::header(3, 1, 1, 1).$directory.$miniFat.$miniStream.self::fat([0xFFFFFFFE, 0xFFFFFFFE, 0xFFFFFFFE, 0xFFFFFFFD]);
+        return self::header(3, 1, 1, 1) . $directory . $miniFat . $miniStream . self::fat([0xFFFFFFFE, 0xFFFFFFFE, 0xFFFFFFFE, 0xFFFFFFFD]);
     }
 
     private static function header(int $fatSector, int $miniCount, int $miniStart, int $fatCount): string
     {
         $u16 = static fn (int $v): string => pack('v', $v);
         $u32 = static fn (int $v): string => pack('V', $v);
-        $h = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1".str_repeat("\0", 16).$u16(0x003E).$u16(3)."\xFE\xFF".$u16(9).$u16(6).str_repeat("\0", 6);
-        $h .= $u32(0).$u32(1).$u32(0).$u32(0).$u32(0x1000).$u32($miniStart).$u32($miniCount).$u32(0xFFFFFFFE).$u32(0);
+        $h = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\0", 16) . $u16(0x003E) . $u16(3) . "\xFE\xFF" . $u16(9) . $u16(6) . str_repeat("\0", 6);
+        $h .= $u32(0) . $u32(1) . $u32(0) . $u32(0) . $u32(0x1000) . $u32($miniStart) . $u32($miniCount) . $u32(0xFFFFFFFE) . $u32(0);
         $h .= $u32($fatSector);
         for ($i = 1;$i < 109;$i++) {
             $h .= $u32(0xFFFFFFFF);
         }
         return $h;
     }
+
     private static function entry(string $name, int $type, int $left, int $right, int $child, int $start, int $size): string
     {
         $u16 = static fn (int $v): string => pack('v', $v);
         $u32 = static fn (int $v): string => pack('V', $v);
-        $encoded = mb_convert_encoding($name, 'UTF-16LE', 'UTF-8')."\0\0";
-        return str_pad($encoded, 64, "\0").$u16(strlen($encoded)).chr($type).chr(1).$u32($left).$u32($right).$u32($child).str_repeat("\0", 16).$u32(0).str_repeat("\0", 16).$u32($start).$u32($size).$u32(0);
+        $encoded = mb_convert_encoding($name, 'UTF-16LE', 'UTF-8') . "\0\0";
+        return str_pad($encoded, 64, "\0") . $u16(strlen($encoded)) . chr($type) . chr(1) . $u32($left) . $u32($right) . $u32($child) . str_repeat("\0", 16) . $u32(0) . str_repeat("\0", 16) . $u32($start) . $u32($size) . $u32(0);
     }
+
     private static function fat(array $values): string
     {
         $out = '';

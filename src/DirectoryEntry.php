@@ -80,111 +80,135 @@ final class DirectoryEntry
     {
         return $this->id;
     }
+
     /** Returns the decoded UTF-8 entry name. */
     public function getName(): string
     {
         return $this->name;
     }
+
     /** Returns the encoded name length in bytes, including its UTF-16 terminator. */
     public function getNameByteLength(): int
     {
         return $this->nameByteLength;
     }
+
     /** Returns the red/black directory-tree color. */
     public function getColor(): int
     {
         return $this->color;
     }
+
     /** Returns the storage CLSID as a canonical UUID string. */
     public function getClassId(): string
     {
         return $this->classId;
     }
+
     /** Returns application-defined storage state bits. */
     public function getStateBits(): int
     {
         return $this->stateBits;
     }
+
     /** Returns the creation FILETIME converted to UTC, or null when unset. */
     public function getCreationTime(): ?\DateTimeImmutable
     {
         return $this->creationTime;
     }
+
     /** Returns the modification FILETIME converted to UTC, or null when unset. */
     public function getModifiedTime(): ?\DateTimeImmutable
     {
         return $this->modifiedTime;
     }
+
     /** Returns the exact creation FILETIME tick count, or null when unset. */
     public function getCreationFileTimeTicks(): ?int
     {
         return $this->creationFileTimeTicks;
     }
+
     /** Returns the exact modification FILETIME tick count, or null when unset. */
     public function getModifiedFileTimeTicks(): ?int
     {
         return $this->modifiedFileTimeTicks;
     }
+
     /** Returns the raw left-sibling directory identifier. */
     public function getLeftSiblingId(): int
     {
         return $this->leftId;
     }
+
     /** Returns the raw right-sibling directory identifier. */
     public function getRightSiblingId(): int
     {
         return $this->rightId;
     }
+
     /** Returns the raw child directory identifier. */
     public function getChildId(): int
     {
         return $this->childId;
     }
+
     /** Returns the left sibling, or null when absent. */
     public function getLeftSibling(): ?self
     {
         return $this->owner->getEntryById($this->leftId);
     }
+
     /** Returns the right sibling, or null when absent. */
     public function getRightSibling(): ?self
     {
         return $this->owner->getEntryById($this->rightId);
     }
+
     /** Returns the root child entry, or null when absent. */
     public function getChild(): ?self
     {
         return $this->owner->getEntryById($this->childId);
     }
+
     /** Returns the slash-separated path from the root storage. */
     public function getPath(): string
     {
         return $this->path;
     }
+
     /** Returns one of the TYPE_* constants. */
     public function getType(): int
     {
         return $this->type;
     }
+
     /** Returns the stream size in bytes. */
     public function getSize(): int
     {
         return $this->size;
     }
+
     /** Returns true for normal stream entries. */
     public function isStream(): bool
     {
         return $this->type === self::TYPE_STREAM;
     }
+
     /** Returns true for storage and root entries. */
     public function isStorage(): bool
     {
         return $this->type === self::TYPE_STORAGE || $this->type === self::TYPE_ROOT;
     }
-    /** @internal */ public function getStartSector(): int
+
+    /** @internal */
+    public function getStartSector(): int
     {
         return $this->startSector;
     }
-    /** @internal */ public function setPath(string $path): void
+
+    /** @internal */
+    public function setPath(string $path): void
     {
         $this->path = $path;
     }

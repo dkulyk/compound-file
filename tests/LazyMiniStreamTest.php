@@ -67,7 +67,7 @@ final class LazyMiniStreamTest extends TestCase
         $first = fread($resource, 512);
         $second = fread($resource, 512);
         fseek($resource, ($start + 1) * 512);
-        fwrite($resource, $second.$first);
+        fwrite($resource, $second . $first);
         fseek($resource, ($fatSector + 1) * 512 + $start * 4);
         fwrite($resource, pack('V2', $start + 2, $start));
         fseek($resource, 512 + 116);

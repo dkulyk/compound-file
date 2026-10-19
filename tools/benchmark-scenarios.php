@@ -5,7 +5,7 @@ declare(strict_types=1);
 use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 
-require dirname(__DIR__).'/vendor/autoload.php';
+require dirname(__DIR__) . '/vendor/autoload.php';
 
 // Every measured operation gets a fresh process; fixture creation is separate.
 function child(array $arguments): array
@@ -27,7 +27,7 @@ function child(array $arguments): array
     fclose($pipes[1]);
     fclose($pipes[2]);
     if (proc_close($process) !== 0) {
-        throw new RuntimeException('Benchmark worker failed: '.$error);
+        throw new RuntimeException('Benchmark worker failed: ' . $error);
     }
     return json_decode($output, true, 512, JSON_THROW_ON_ERROR);
 }
@@ -55,10 +55,10 @@ function worker(string $operation, string $scenario, string $path, int $count): 
             } else {
                 for ($i = 0; $i < $count; $i++) {
                     if ($scenario === 'directories') {
-                        $writer->createStorage('D'.$i);
-                        $writer->setStreamContents('D'.$i.'/Data', 'x');
+                        $writer->createStorage('D' . $i);
+                        $writer->setStreamContents('D' . $i . '/Data', 'x');
                     } else {
-                        $writer->setStreamContents('S'.$i, str_repeat('m', 3000));
+                        $writer->setStreamContents('S' . $i, str_repeat('m', 3000));
                     }
                 }
             }
@@ -91,7 +91,7 @@ function worker(string $operation, string $scenario, string $path, int $count): 
                 if ($scenario === 'directories') {
                     for ($i = 0; $i < $count; $i++) {
                         $index = $reverse ? $count - 1 - $i : $i;
-                        if (count($file->getChildren('D'.$index)) !== 1) {
+                        if (count($file->getChildren('D' . $index)) !== 1) {
                             throw new RuntimeException('Unexpected directory child count.');
                         }
                     }
@@ -99,7 +99,7 @@ function worker(string $operation, string $scenario, string $path, int $count): 
                     $expected = str_repeat('m', 3000);
                     for ($i = 0; $i < $count; $i++) {
                         $index = $reverse ? $count - 1 - $i : $i;
-                        $data = $file->getStreamContents('S'.$index);
+                        $data = $file->getStreamContents('S' . $index);
                         if ($data !== $expected) {
                             throw new RuntimeException('Incorrect mini-stream contents.');
                         }
@@ -197,7 +197,7 @@ try {
             'platform' => PHP_OS_FAMILY,
             'quick' => $quick,
             'results' => $results,
-        ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR)."\n";
+        ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
     } else {
         printf("PHP %s / %s; fresh workers, Xdebug off; median of 3 runs\n", PHP_VERSION, PHP_OS_FAMILY);
         foreach ($results as $result) {
@@ -212,6 +212,6 @@ try {
         }
     }
 } catch (Throwable $exception) {
-    fwrite(STDERR, $exception->getMessage()."\n");
+    fwrite(STDERR, $exception->getMessage() . "\n");
     exit(1);
 }

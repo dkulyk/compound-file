@@ -6,13 +6,13 @@ use DK\CompoundFile\CompoundFile;
 use DK\CompoundFile\CompoundFileWriter;
 use DK\CompoundFile\DirectoryEntry;
 
-require dirname(__DIR__).'/vendor/autoload.php';
+require dirname(__DIR__) . '/vendor/autoload.php';
 
 $arguments = array_slice($argv, 1);
 $json = in_array('--json', $arguments, true);
 $paths = array_values(array_filter($arguments, static fn (string $argument): bool => $argument !== '--json'));
 if ($paths === []) {
-    $paths[] = dirname(__DIR__).'/tests/fixtures/README.doc';
+    $paths[] = dirname(__DIR__) . '/tests/fixtures/README.doc';
 }
 
 $results = [];
@@ -29,7 +29,7 @@ if ($json) {
     echo json_encode(
         ['php' => PHP_VERSION, 'platform' => PHP_OS_FAMILY, 'results' => $results],
         JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
-    )."\n";
+    ) . "\n";
     exit(0);
 }
 

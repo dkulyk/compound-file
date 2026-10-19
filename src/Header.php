@@ -28,67 +28,83 @@ final class Header
     {
         return $this->minorVersion;
     }
+
     public function getMajorVersion(): int
     {
         return $this->majorVersion;
     }
+
     public function getSectorShift(): int
     {
         return $this->sectorShift;
     }
+
     public function getSectorSize(): int
     {
         return 1 << $this->sectorShift;
     }
+
     public function getMiniSectorShift(): int
     {
         return $this->miniSectorShift;
     }
+
     public function getMiniSectorSize(): int
     {
         return 1 << $this->miniSectorShift;
     }
+
     public function getFatSectorCount(): int
     {
         return $this->fatSectorCount;
     }
+
     public function getDirectoryStartSector(): int
     {
         return $this->directoryStartSector;
     }
+
     /** Returns the declared directory sector count (version 4; zero in version 3). */
     public function getDirectorySectorCount(): int
     {
         return $this->directorySectorCount;
     }
+
     public function getTransactionSignature(): int
     {
         return $this->transactionSignature;
     }
+
     public function getMiniStreamCutoff(): int
     {
         return $this->miniStreamCutoff;
     }
+
     public function getMiniFatStartSector(): int
     {
         return $this->miniFatStartSector;
     }
+
     public function getMiniFatSectorCount(): int
     {
         return $this->miniFatSectorCount;
     }
+
     public function getDifatStartSector(): int
     {
         return $this->difatStartSector;
     }
+
     public function getDifatSectorCount(): int
     {
         return $this->difatSectorCount;
     }
+
     public function hasMiniFat(): bool
     {
         return $this->miniFatSectorCount > 0;
     }
+
     public function hasDifatSectors(): bool
     {
         return $this->difatSectorCount > 0;
