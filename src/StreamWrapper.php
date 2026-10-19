@@ -57,6 +57,7 @@ final class StreamWrapper
             return false;
         }
     }
+
     /** @internal */
     public function stream_close(): void
     {
@@ -64,22 +65,31 @@ final class StreamWrapper
         $this->file = null;
         unset($this->stream);
     }
-    /** @internal */ public function stream_read(int $count): string
+
+    /** @internal */
+    public function stream_read(int $count): string
     {
         return $this->stream->read($count);
     }
-    /** @internal */ public function stream_eof(): bool
+
+    /** @internal */
+    public function stream_eof(): bool
     {
         return $this->stream->eof();
     }
-    /** @internal */ public function stream_tell(): int
+
+    /** @internal */
+    public function stream_tell(): int
     {
         return $this->stream->tell();
     }
-    /** @internal */ public function stream_seek(int $offset, int $whence = SEEK_SET): bool
+
+    /** @internal */
+    public function stream_seek(int $offset, int $whence = SEEK_SET): bool
     {
         return $this->stream->seek($offset, $whence);
     }
+
     /**
      * @internal
      * @return array<int|string, int>

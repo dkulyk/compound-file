@@ -24,11 +24,13 @@ final class AllocationTable
     {
         return $this->difat;
     }
+
     /** @return list<int> */
     public function getFat(): array
     {
         return $this->fat;
     }
+
     /** @return list<int> */
     public function getMiniFat(): array
     {

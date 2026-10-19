@@ -28,21 +28,25 @@ final class Stream
     {
         $this->file->streamClosed();
     }
+
     /** Returns the total stream size in bytes. */
     public function getSize(): int
     {
         return $this->entry->getSize();
     }
+
     /** Returns the current byte offset. */
     public function tell(): int
     {
         return $this->position;
     }
+
     /** Returns true when the current position is at the end. */
     public function eof(): bool
     {
         return $this->position >= $this->getSize();
     }
+
     /** Reads at most $length bytes and advances the current position. */
     public function read(int $length): string
     {
@@ -53,11 +57,13 @@ final class Stream
         $this->position += strlen($data);
         return $data;
     }
+
     /** Reads the complete stream without changing the current position. */
     public function getContents(): string
     {
         return $this->file->readEntry($this->entry, 0, $this->getSize());
     }
+
     /** Moves the current position; returns false when the target is outside the stream. */
     public function seek(int $offset, int $whence = SEEK_SET): bool
     {

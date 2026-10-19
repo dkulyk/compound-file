@@ -51,7 +51,7 @@ final class StreamTest extends TestCase
         foreach ([118, 3, 87, 0, 117, 42, 87] as $sector) {
             self::assertTrue($stream->seek($sector * 512 + 500));
             self::assertSame(
-                str_repeat(chr($sector), 12).str_repeat(chr($sector + 1), 12),
+                str_repeat(chr($sector), 12) . str_repeat(chr($sector + 1), 12),
                 $stream->read(24),
             );
         }

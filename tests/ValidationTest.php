@@ -24,7 +24,7 @@ final class ValidationTest extends TestCase
     {
         foreach (['/' => 'slash', '\\' => 'backslash', ':' => 'colon', '!' => 'exclamation'] as $character => $label) {
             foreach ([false, true] as $streamParent) {
-                yield $label.'-'.($streamParent ? 'stream-parent' : 'missing-parent') => ['A'.$character.'B', $streamParent];
+                yield $label . '-' . ($streamParent ? 'stream-parent' : 'missing-parent') => ['A' . $character . 'B', $streamParent];
             }
         }
     }
@@ -208,7 +208,7 @@ final class ValidationTest extends TestCase
         // chain's first sector. After a failed read, a later read that runs past
         // the part of the chain the failed walk had covered must fail too, rather
         // than resuming a half-walked chain with a stale cycle detector.
-        $payload = str_repeat('A', 512).str_repeat('B', 512).str_repeat('C', 512).str_repeat('x', 2560);
+        $payload = str_repeat('A', 512) . str_repeat('B', 512) . str_repeat('C', 512) . str_repeat('x', 2560);
         $bytes = substr_replace(FixtureBuilder::regularWithPayload($payload), pack('V', 2), 1024 + 4 * 4, 4);
         $file = $this->parse($bytes);
         foreach ([1, 2] as $attempt) {

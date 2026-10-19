@@ -127,7 +127,7 @@ final class CompoundFileWriter
         $parts = $this->pathParts($path);
         $current = '';
         foreach ($parts as $part) {
-            $next = $current === '' ? $part : $current.'/'.$part;
+            $next = $current === '' ? $part : $current . '/' . $part;
             $key = $this->normalizePath($next);
             if (isset($this->entries[$key])) {
                 if (!$this->entries[$key]->isStorage()) {
@@ -224,7 +224,7 @@ final class CompoundFileWriter
             return false;
         }
         foreach (array_keys($this->entries) as $candidate) {
-            if ($candidate === $key || str_starts_with($candidate, $key.'/')) {
+            if ($candidate === $key || str_starts_with($candidate, $key . '/')) {
                 unset($this->entries[$candidate]);
             }
         }
@@ -500,7 +500,7 @@ final class CompoundFileWriter
             $packed .= pack('V*', ...range($next, min($next + 1023, $end - 1)));
         }
 
-        return $packed.$endEntry;
+        return $packed . $endEntry;
     }
 
     /** @param list<int> $fatSectors */
@@ -514,14 +514,14 @@ final class CompoundFileWriter
         int $difatStart,
         int $difatSectorCount,
     ): string {
-        $header = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1".str_repeat("\0", 16);
-        $header .= $this->u16(0x003E).$this->u16($this->majorVersion);
+        $header = "\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" . str_repeat("\0", 16);
+        $header .= $this->u16(0x003E) . $this->u16($this->majorVersion);
         $header .= "\xFE\xFF";
-        $header .= $this->u16($sectorSize === 512 ? 9 : 12).$this->u16(6).str_repeat("\0", 6);
+        $header .= $this->u16($sectorSize === 512 ? 9 : 12) . $this->u16(6) . str_repeat("\0", 6);
         $header .= $this->u32($this->majorVersion === 4 ? $directorySectorCount : 0);
-        $header .= $this->u32(count($fatSectors)).$this->u32($directoryStart).$this->u32(0);
-        $header .= $this->u32(self::MINI_CUTOFF).$this->u32($miniFatStart).$this->u32($miniFatSectorCount);
-        $header .= $this->u32($difatStart).$this->u32($difatSectorCount);
+        $header .= $this->u32(count($fatSectors)) . $this->u32($directoryStart) . $this->u32(0);
+        $header .= $this->u32(self::MINI_CUTOFF) . $this->u32($miniFatStart) . $this->u32($miniFatSectorCount);
+        $header .= $this->u32($difatStart) . $this->u32($difatSectorCount);
         for ($index = 0; $index < 109; $index++) {
             $header .= $this->u32($fatSectors[$index] ?? self::FREE);
         }
@@ -534,7 +534,7 @@ final class CompoundFileWriter
      */
     private function directoryEntry(WritableEntry $entry, WritableTreeNode $tree, array $location): string
     {
-        $encodedName = mb_convert_encoding($entry->name, 'UTF-16LE', 'UTF-8')."\0\0";
+        $encodedName = mb_convert_encoding($entry->name, 'UTF-16LE', 'UTF-8') . "\0\0";
         if (strlen($encodedName) > 64) {
             throw new CfbfException(sprintf('Directory entry name "%s" exceeds 31 UTF-16 code units.', $entry->name));
         }
@@ -543,14 +543,14 @@ final class CompoundFileWriter
         $sizeLow = $size % 4294967296;
 
         return str_pad($encodedName, 64, "\0")
-            .$this->u16(strlen($encodedName))
-            .pack('C2', $entry->type, $tree->color)
-            .$this->u32($tree->left).$this->u32($tree->right).$this->u32($tree->child)
-            .$this->encodeClassId($entry->classId)
-            .$this->u32($entry->stateBits)
-            .$this->encodeFileTime($entry->creationTime, $entry->creationFileTimeTicks)
-            .$this->encodeFileTime($entry->modifiedTime, $entry->modifiedFileTimeTicks)
-            .$this->u32($location['start']).$this->u32($sizeLow).$this->u32($sizeHigh);
+            . $this->u16(strlen($encodedName))
+            . pack('C2', $entry->type, $tree->color)
+            . $this->u32($tree->left) . $this->u32($tree->right) . $this->u32($tree->child)
+            . $this->encodeClassId($entry->classId)
+            . $this->u32($entry->stateBits)
+            . $this->encodeFileTime($entry->creationTime, $entry->creationFileTimeTicks)
+            . $this->encodeFileTime($entry->modifiedTime, $entry->modifiedFileTimeTicks)
+            . $this->u32($location['start']) . $this->u32($sizeLow) . $this->u32($sizeHigh);
     }
 
     private function encodeClassId(string $classId): string
@@ -560,9 +560,9 @@ final class CompoundFileWriter
         }
 
         return $this->u32((int) hexdec($parts[1]))
-            .$this->u16((int) hexdec($parts[2]))
-            .$this->u16((int) hexdec($parts[3]))
-            .hex2bin($parts[4].$parts[5]);
+            . $this->u16((int) hexdec($parts[2]))
+            . $this->u16((int) hexdec($parts[3]))
+            . hex2bin($parts[4] . $parts[5]);
     }
 
     private function encodeFileTime(?\DateTimeInterface $time, ?int $originalTicks): string
@@ -572,7 +572,7 @@ final class CompoundFileWriter
         }
         $ticks = $originalTicks ?? FileTime::toTicks($time);
 
-        return $this->u32($ticks % 4294967296).$this->u32(intdiv($ticks, 4294967296));
+        return $this->u32($ticks % 4294967296) . $this->u32(intdiv($ticks, 4294967296));
     }
 
     /** @return list<string> */
@@ -617,7 +617,7 @@ final class CompoundFileWriter
             throw new CfbfException(sprintf('Cannot replace storage "%s" with a stream.', $path));
         }
 
-        return [$parent === '' ? $name : $parent.'/'.$name, $name, $normalized];
+        return [$parent === '' ? $name : $parent . '/' . $name, $name, $normalized];
     }
 
     private function entry(string $path): WritableEntry

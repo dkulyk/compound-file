@@ -50,7 +50,7 @@ final class CompoundFileTest extends TestCase
         $writer->createStorage('Ünicode/Nested');
         $writer->createStorage('Empty');
         foreach (['Zulu', 'Alpha', 'Beta'] as $name) {
-            $writer->setStreamContents('Ünicode/'.$name, $name);
+            $writer->setStreamContents('Ünicode/' . $name, $name);
         }
         $writer->setStreamContents('Ünicode/Nested/Leaf', 'leaf');
         $resource = fopen('php://temp', 'w+b');
@@ -98,6 +98,7 @@ final class CompoundFileTest extends TestCase
         self::assertTrue($stream->seek(-4, SEEK_END));
         self::assertSame('OLE2', $stream->read(10));
     }
+
     public function testReadsMiniFatStream(): void
     {
         $resource = fopen('php://temp', 'w+b');
@@ -105,6 +106,7 @@ final class CompoundFileTest extends TestCase
         rewind($resource);
         self::assertSame(str_repeat('mini-', 20), CompoundFile::fromResource($resource)->getStreamContents('Small'));
     }
+
     public function testRejectsBigEndianByteOrderMarker(): void
     {
         // MS-CFB requires the marker 0xFFFE, stored as FE FF.
@@ -132,7 +134,7 @@ final class CompoundFileTest extends TestCase
             foreach (['openStream', 'getStreamContents'] as $method) {
                 try {
                     $first->{$method}($foreignEntry);
-                    self::fail($method.' must reject an entry from another parser.');
+                    self::fail($method . ' must reject an entry from another parser.');
                 } catch (\InvalidArgumentException $exception) {
                     self::assertStringContainsString('different compound file', $exception->getMessage());
                 }
@@ -146,6 +148,7 @@ final class CompoundFileTest extends TestCase
             $second->close();
         }
     }
+
     public function testRejectsInvalidSignature(): void
     {
         $resource = fopen('php://temp', 'w+b');

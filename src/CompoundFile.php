@@ -20,6 +20,10 @@ use DK\CompoundFile\Internal\SectorChainCache;
 final class CompoundFile
 {
     private const NONE = 0xFFFFFFFF;
+    private const MINI_STREAM_BLOCK_SIZE = 65536;
+    private const MINI_STREAM_CACHE_BLOCKS = 16;
+    private const CHAIN_CACHE_ENTRIES = 1024;
+    private const CHAIN_CACHE_SECTORS = 32768;
 
     private RandomAccessReader $reader;
     private int $openStreams = 0;
@@ -42,15 +46,11 @@ final class CompoundFile
     /** @var array<string, list<DirectoryEntry>> */
     private array $childrenByPath = [];
     private ?DirectoryEntry $root = null;
-    private const MINI_STREAM_BLOCK_SIZE = 65536;
-    private const MINI_STREAM_CACHE_BLOCKS = 16;
     private int $miniStreamSize = 0;
     /** @var list<int> */
     private array $miniStreamSectors = [];
     /** @var array<int, string> Bounded FIFO cache of mini-stream payload blocks. */
     private array $miniStreamBlocks = [];
-    private const CHAIN_CACHE_ENTRIES = 1024;
-    private const CHAIN_CACHE_SECTORS = 32768;
     private SectorChainCache $regularChainCache;
     private SectorChainCache $miniChainCache;
 
@@ -384,7 +384,7 @@ final class CompoundFile
     private function parseDirectory(string $bytes): void
     {
         $format = 'x64/vnameLength/Ctype/Ccolor/VleftId/VrightId/VchildId/a16classId/VstateBits/'
-            .'VcreationLow/VcreationHigh/VmodifiedLow/VmodifiedHigh/VstartSector/VsizeLow/VsizeHigh';
+            . 'VcreationLow/VcreationHigh/VmodifiedLow/VmodifiedHigh/VstartSector/VsizeLow/VsizeHigh';
         $length = strlen($bytes);
 
         for ($offset = 0, $id = 0; $offset + 128 <= $length; $offset += 128, $id++) {
@@ -478,7 +478,7 @@ final class CompoundFile
             }
             $seen[$id] = true;
             $entry = $this->entries[$id];
-            $path = $parent === '' ? $entry->getName() : $parent.'/'.$entry->getName();
+            $path = $parent === '' ? $entry->getName() : $parent . '/' . $entry->getName();
             $entry->setPath($path);
             $normalizedPath = $this->normalizePath($path);
             if (isset($this->entriesByPath[$normalizedPath])) {
@@ -634,6 +634,7 @@ final class CompoundFile
         // In version 4 the 512-byte header is padded to one 4096-byte sector.
         return $this->sectorSize + $id * $this->sectorSize;
     }
+
     /** @return list<int> */
     private function uint32Array(string $bytes): array
     {
@@ -644,7 +645,7 @@ final class CompoundFile
 
         // unpack() numbers from 1. Decoding a leading dummy word and shifting it off
         // renumbers the array in place; array_values() would copy the whole table.
-        $values = unpack('V*', "\0\0\0\0".substr($bytes, 0, $usable));
+        $values = unpack('V*', "\0\0\0\0" . substr($bytes, 0, $usable));
         if ($values !== false) {
             array_shift($values);
         }
@@ -654,6 +655,7 @@ final class CompoundFile
 
         return $values;
     }
+
     private function u16(string $bytes, int $offset): int
     {
         $value = unpack('v', substr($bytes, $offset, 2));
@@ -662,6 +664,7 @@ final class CompoundFile
         }
         return $value[1];
     }
+
     private function u32(string $bytes, int $offset): int
     {
         $value = unpack('V', substr($bytes, $offset, 4));
@@ -670,6 +673,7 @@ final class CompoundFile
         }
         return $value[1];
     }
+
     private function combine64(int $low, int $high): int
     {
         if (PHP_INT_SIZE < 8 && $high !== 0) {
